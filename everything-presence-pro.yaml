@@ -1,0 +1,1525 @@
+substitutions:
+  name: "everything-presence-pro"
+  friendly_name: "Everything Presence Pro"
+  temperature_offset: "-3"
+  humidity_offset: "5"
+  temperature_update_interval: "2s"
+  illuminance_update_interval: "2s"
+  hidden_ssid: "false"
+  factory_reset_disabled: "true"
+  uart_target_output_disabled: "true"
+  uart_presence_output_disabled: "true"
+  log_level: "DEBUG"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf   
+    version: recommended
+
+packages:
+   ld2450_common: github://everythingsmarthome/everything-presence-lite/common/ld2450-base.yaml@main
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: True
+  project: 
+    name: EverythingSmartTechnology.Everything Presence Pro
+    version: "1.0.8"
+  on_boot:
+    - priority: 500 
+      then:
+        - delay: 200ms
+        - switch.turn_on: alarm_relay
+        # Initial startup sequence that showcases the LED capabilities
+        - light.turn_on:
+            id: rgb_led
+            brightness: 50%
+            red: 100%
+            green: 0%
+            blue: 0%
+            white: 0%
+            transition_length: 200ms
+        - delay: 500ms
+        - light.turn_on:
+            brightness: 50%
+            id: rgb_led
+            red: 0%
+            green: 100%
+            blue: 0%
+            white: 0%
+            transition_length: 200ms
+        - delay: 500ms
+        - light.turn_on:
+            brightness: 50%
+            id: rgb_led
+            red: 0%
+            green: 0%
+            blue: 100%
+            white: 0%
+            transition_length: 200ms
+        - delay: 500ms
+        - light.turn_on:
+            brightness: 50%
+            id: rgb_led
+            red: 100%
+            green: 100%
+            blue: 100%
+            white: 0%
+            transition_length: 200ms
+        - delay: 500ms
+        - light.turn_off: rgb_led
+        - script.execute: update_led_state
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  on_client_connected:
+    then:
+      - light.turn_on:
+          id: rgb_led
+          brightness: 60%
+          red: 0%
+          green: 100%
+          blue: 100%
+          white: 0%
+          flash_length: 1s
+      - delay: 1s
+      # Return to previous state based on LED mode
+      - if:
+          condition:
+            lambda: 'return id(led_mode).state == "Environmental";'
+          then:
+            - script.execute: update_environmental_led
+      - if:
+          condition:
+            lambda: 'return id(led_mode).state == "Manual Control";'
+          then:
+            - light.turn_off: rgb_led
+      - if:
+          condition:
+            lambda: 'return id(led_mode).state == "Presence";'
+          then:
+            - light.turn_off: rgb_led
+
+  on_client_disconnected:
+    then:
+      - if:
+          condition:
+            lambda: 'return id(led_mode).state != "Manual Control";'
+          then:
+            - light.turn_on:
+                id: rgb_led
+                effect: "API Disconnected"
+
+http_request:
+
+update:
+  - platform: http_request
+    name: Firmware Update
+    source: https://docs.everythingsmart.io/update/everything-presence-pro/manifest.json
+
+ota:
+  - platform: esphome
+  - platform: http_request
+
+# wifi:
+#   ssid: Everything Smart IoT
+#   password: NoWifiHere.
+
+#   # Enable fallback hotspot (captive portal) in case wifi connection fails
+#   ap:
+#     ssid: "Dual-Mmwave Fallback Hotspot"
+#     password: "mVZVN2Aoc9Vd"
+
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk_mode: GPIO17_OUT
+  phy_addr: 0
+  use_address: "10.5.12.170"
+
+debug:
+  update_interval: 5s
+
+text_sensor:
+  - platform: debug
+    device:
+      name: "Device Info"
+    reset_reason:
+      name: "Reset Reason"
+
+sensor:
+  - platform: scd4x
+    i2c_id: bus_b
+    id: scd40
+    co2:
+      name: "CO2"
+      id: "co2"
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return id(led_mode).state == "Environmental";'
+              then:
+                - script.execute: update_environmental_led
+    automatic_self_calibration: false
+  - platform: shtcx
+    id: "shtc3_sensor"
+    i2c_id: bus_a
+    temperature:
+      name: Temperature
+      id: temperature_sensor
+      filters:
+        - offset: ${temperature_offset}
+        - lambda: "return x + id(temperature_offset_ui).state;"
+    humidity:
+      name: Humidity
+      id: humidity_sensor
+      filters:
+        - offset: ${humidity_offset}
+        - lambda: "return x + id(humidity_offset_ui).state;"
+    address: 0x70
+    update_interval: ${temperature_update_interval}
+  - platform: bh1750
+    name: Illuminance
+    id: illuminance_sensor
+    i2c_id: bus_a
+    address: 0x23
+    update_interval: ${illuminance_update_interval}
+    filters:
+      - lambda: "return x + id(illuminance_offset_ui).state;"
+      - clamp:
+          min_value: 0
+
+  - platform: debug
+    free:
+      name: "Heap Free"
+    block:
+      name: "Heap Max Block"
+    loop_time:
+      name: "Loop Time"
+
+i2c:
+  - id: bus_a
+    scl: GPIO32
+    sda: GPIO33
+    scan: true
+  - id: bus_b
+    scl: GPIO16
+    sda: GPIO4
+    scan: true
+
+uart:
+  - id: uart_bus_dfrobot
+    tx_pin: GPIO5
+    rx_pin: GPIO15
+    rx_buffer_size: 512
+    baud_rate: 9600
+    debug:
+      direction: BOTH
+      dummy_receiver: true
+      after:
+        delimiter: "\n"
+      sequence:
+        - lambda: UARTDebug::log_string(direction, bytes);
+  - id: uart_bus
+    tx_pin:
+      number: GPIO13
+      mode:
+        input: true
+        pullup: true
+    rx_pin:
+      number: GPIO14
+      mode:
+        input: true
+        pullup: true
+    baud_rate: 256000
+    debug:
+      direction: BOTH
+      dummy_receiver: True
+      after:
+        delimiter: [0X55, 0XCC]
+      sequence:
+        #- lambda: UARTDebug::log_hex(direction, bytes, ' ');
+        - lambda: |-
+            if ((millis() - id(mmwave_update_time)) <= id(mmwave_update_interval)) { 
+              return;
+            };
+            id(mmwave_update_time) = millis();
+
+            if (bytes.size() != 30) {
+              ESP_LOGW("LD2450", "Expected 30 bytes but received %hu!", bytes.size());
+              return;
+            }
+
+            bool update_entities = false;
+            if(id(extra_entities) != 0) {
+              id(entities_update_count) += 1;
+              update_entities = id(entities_update_count) >= id(entities_update_max_count);
+              if (update_entities) {
+                id(entities_update_count) = 0;
+              }
+            }
+
+            const static float RADIANS_TO_DEGREES = 180.0 / 3.14159265358979323846;
+            const static float DEGREES_TO_RADIANS = 3.14159265358979323846 / 180.0;
+            const static int16_t MIN_INT16_VAL = -32768;
+
+            float max_distance = float(id(distance).state) * 10;
+            float installation_angle = id(installation_angle_ui).state * DEGREES_TO_RADIANS;
+
+            // Extracted for consistency of read values
+            int zone1_count = 0;
+            int zone1_begin_x_value = min(id(zone1_begin_x).state, id(zone1_end_x).state);
+            int zone1_end_x_value = max(id(zone1_begin_x).state, id(zone1_end_x).state);
+            int zone1_begin_y_value = min(id(zone1_begin_y).state, id(zone1_end_y).state);
+            int zone1_end_y_value = max(id(zone1_begin_y).state, id(zone1_end_y).state);
+
+            int zone2_count = 0;
+            int zone2_begin_x_value = min(id(zone2_begin_x).state, id(zone2_end_x).state);
+            int zone2_end_x_value = max(id(zone2_begin_x).state, id(zone2_end_x).state);
+            int zone2_begin_y_value = min(id(zone2_begin_y).state, id(zone2_end_y).state);
+            int zone2_end_y_value = max(id(zone2_begin_y).state, id(zone2_end_y).state);
+
+            int zone3_count = 0;
+            int zone3_begin_x_value = min(id(zone3_begin_x).state, id(zone3_end_x).state);
+            int zone3_end_x_value = max(id(zone3_begin_x).state, id(zone3_end_x).state);
+            int zone3_begin_y_value = min(id(zone3_begin_y).state, id(zone3_end_y).state);
+            int zone3_end_y_value = max(id(zone3_begin_y).state, id(zone3_end_y).state);
+
+            int zone4_count = 0;
+            int zone4_begin_x_value = min(id(zone4_begin_x).state, id(zone4_end_x).state);
+            int zone4_end_x_value = max(id(zone4_begin_x).state, id(zone4_end_x).state);
+            int zone4_begin_y_value = min(id(zone4_begin_y).state, id(zone4_end_y).state);
+            int zone4_end_y_value = max(id(zone4_begin_y).state, id(zone4_end_y).state);
+
+            int occupancy_mask_1_count = 0;
+            int occupancy_mask_1_begin_x_value = min(id(occupancy_mask_1_begin_x).state, id(occupancy_mask_1_end_x).state);
+            int occupancy_mask_1_end_x_value = max(id(occupancy_mask_1_begin_x).state, id(occupancy_mask_1_end_x).state);
+            int occupancy_mask_1_begin_y_value = min(id(occupancy_mask_1_begin_y).state, id(occupancy_mask_1_end_y).state);
+            int occupancy_mask_1_end_y_value = max(id(occupancy_mask_1_begin_y).state, id(occupancy_mask_1_end_y).state);
+            int occupancy_mask_2_count = 0;
+            int occupancy_mask_2_begin_x_value = min(id(occupancy_mask_2_begin_x).state, id(occupancy_mask_2_end_x).state);
+            int occupancy_mask_2_end_x_value = max(id(occupancy_mask_2_begin_x).state, id(occupancy_mask_2_end_x).state);
+            int occupancy_mask_2_begin_y_value = min(id(occupancy_mask_2_begin_y).state, id(occupancy_mask_2_end_y).state);
+            int occupancy_mask_2_end_y_value = max(id(occupancy_mask_2_begin_y).state, id(occupancy_mask_2_end_y).state);
+
+            bool p1_detected = *((uint16_t *)(&bytes[10])) != 0;
+            bool p2_detected = *((uint16_t *)(&bytes[18])) != 0;
+            bool p3_detected = *((uint16_t *)(&bytes[26])) != 0;
+            bool target_masked = false;
+
+            if (p1_detected) {
+              int16_t p1_x = *((int16_t *)(&bytes[4]));
+              if (p1_x < 0) p1_x += MIN_INT16_VAL;
+              else p1_x = -p1_x;
+
+              int16_t p1_y = *((int16_t *)(&bytes[6]));
+              if (p1_y < 0) p1_y += MIN_INT16_VAL;
+              else p1_y = -p1_y;
+
+              float p1_distance = sqrt(p1_x * p1_x + p1_y * p1_y);
+              
+              if (p1_distance > max_distance) {
+                p1_detected = false;
+              } else {
+                float p1_angle;
+                if (installation_angle != 0 || (update_entities && id(extra_entities) >= 4)) {
+                  p1_angle = atan2(p1_y, p1_x);
+                }
+                if (installation_angle != 0) {
+                  float angle = p1_angle - installation_angle;
+                  p1_x = p1_distance * cos(angle);
+                  p1_y = p1_distance * sin(angle);
+                }
+                // Apply upside-down mounting inversion if enabled
+                if (id(upside_down_mounting).state) {
+                  p1_x = -p1_x;
+                }
+                if ((occupancy_mask_1_begin_x_value <= p1_x && p1_x <= occupancy_mask_1_end_x_value) &&
+                    (occupancy_mask_1_begin_y_value <= p1_y && p1_y <= occupancy_mask_1_end_y_value)) {
+                  occupancy_mask_1_count++;
+                  p1_detected = false;
+                  target_masked = true;
+                } else if ((occupancy_mask_2_begin_x_value <= p1_x && p1_x <= occupancy_mask_2_end_x_value) &&
+                    (occupancy_mask_2_begin_y_value <= p1_y && p1_y <= occupancy_mask_2_end_y_value)) {
+                  occupancy_mask_2_count++;
+                  p1_detected = false;
+                  target_masked = true;
+                } else {
+                  if ((zone1_begin_x_value <= p1_x && p1_x <= zone1_end_x_value) &&
+                      (zone1_begin_y_value <= p1_y && p1_y <= zone1_end_y_value)) {
+                    zone1_count++;
+                  }
+                  if ((zone2_begin_x_value <= p1_x && p1_x <= zone2_end_x_value) &&
+                      (zone2_begin_y_value <= p1_y && p1_y <= zone2_end_y_value)) {
+                    zone2_count++;
+                  }
+                  if ((zone3_begin_x_value <= p1_x && p1_x <= zone3_end_x_value) &&
+                      (zone3_begin_y_value <= p1_y && p1_y <= zone3_end_y_value)) {
+                    zone3_count++;
+                  }
+                  if ((zone4_begin_x_value <= p1_x && p1_x <= zone4_end_x_value) &&
+                      (zone4_begin_y_value <= p1_y && p1_y <= zone4_end_y_value)) {
+                    zone4_count++;
+                  }
+                }
+                if (update_entities) {
+                  switch (id(extra_entities)) {
+                    case 5:
+                      {
+                        uint16_t p1_resolution = *((uint16_t *)(&bytes[10]));
+                        int16_t p1_speed = *((int16_t *)(&bytes[8]));
+                        if (p1_speed < 0) p1_speed += MIN_INT16_VAL;
+                        else p1_speed = -p1_speed;
+                        float p1_speed_float = p1_speed / 100.0;
+
+                        if (id(target1_speed).state != p1_speed_float) {
+                          id(target1_speed).publish_state(p1_speed_float);
+                        }
+                        if (id(target1_resolution).state != p1_resolution) {
+                          id(target1_resolution).publish_state(p1_resolution);
+                        }
+                      }
+                    case 4:
+                      p1_angle = (p1_angle * RADIANS_TO_DEGREES) - 90;
+
+                      if (id(target1_angle).state != p1_angle) {
+                        id(target1_angle).publish_state(p1_angle);
+                      }
+                      if (id(target1_distance).state != p1_distance) {
+                        id(target1_distance).publish_state(p1_distance);
+                      }
+                    case 3:
+                      id(target1_active).publish_state(true);
+                    case 2:
+                    case 1:
+                      if (id(target1_x).state != p1_x) {
+                        id(target1_x).publish_state(p1_x);
+                      }
+                      if (id(target1_y).state != p1_y) {
+                        id(target1_y).publish_state(p1_y);
+                      }
+                  }
+                }
+              }
+            }
+
+            if (update_entities && !p1_detected && !target_masked) {
+              switch (id(extra_entities)) {
+                case 5:
+                  if (id(target1_speed).state != 0) {
+                    id(target1_speed).publish_state(0);
+                  }
+                  if (id(target1_resolution).state != 0) {
+                    id(target1_resolution).publish_state(0);
+                  }
+                case 4:
+                  if (id(target1_distance).state != 0) {
+                    id(target1_distance).publish_state(0);
+                  }
+                  if (id(target1_angle).state != 0) {
+                    id(target1_angle).publish_state(0);
+                  }
+                case 3:
+                  id(target1_active).publish_state(false);
+                case 2:
+                case 1:
+                  if (id(target1_x).state != 0) {
+                    id(target1_x).publish_state(0);
+                  }
+                  if (id(target1_y).state != 0) {
+                    id(target1_y).publish_state(0);
+                  }
+              }
+            }
+
+            target_masked = false;
+
+            if (p2_detected) {
+              int16_t p2_x = *((int16_t *)(&bytes[12]));
+              if (p2_x < 0) p2_x += MIN_INT16_VAL;
+              else p2_x = -p2_x;
+
+              int16_t p2_y = *((int16_t *)(&bytes[14]));
+              if (p2_y < 0) p2_y += MIN_INT16_VAL;
+              else p2_y = -p2_y;
+
+              float p2_distance = sqrt(p2_x * p2_x + p2_y * p2_y);
+              
+              if (p2_distance > max_distance) {
+                p2_detected = false;
+              } else {
+                float p2_angle;
+                if (installation_angle != 0 || (update_entities && id(extra_entities) >= 4)) {
+                  p2_angle = atan2(p2_y, p2_x);
+                }
+                if (installation_angle != 0) {
+                  float angle = p2_angle - installation_angle;
+                  p2_x = p2_distance * cos(angle);
+                  p2_y = p2_distance * sin(angle);
+                }
+                // Apply upside-down mounting inversion if enabled
+                if (id(upside_down_mounting).state) {
+                  p2_x = -p2_x;
+                }
+                if ((occupancy_mask_1_begin_x_value <= p2_x && p2_x <= occupancy_mask_1_end_x_value) &&
+                    (occupancy_mask_1_begin_y_value <= p2_y && p2_y <= occupancy_mask_1_end_y_value)) {
+                  occupancy_mask_1_count++;
+                  p2_detected = false;
+                  target_masked = true;
+                } else if ((occupancy_mask_2_begin_x_value <= p2_x && p2_x <= occupancy_mask_2_end_x_value) &&
+                    (occupancy_mask_2_begin_y_value <= p2_y && p2_y <= occupancy_mask_2_end_y_value)) {
+                  occupancy_mask_2_count++;
+                  p2_detected = false;
+                  target_masked = true;
+                } else {
+                  if ((zone1_begin_x_value <= p2_x && p2_x <= zone1_end_x_value) &&
+                      (zone1_begin_y_value <= p2_y && p2_y <= zone1_end_y_value)) {
+                    zone1_count++;
+                  }
+                  if ((zone2_begin_x_value <= p2_x && p2_x <= zone2_end_x_value) &&
+                      (zone2_begin_y_value <= p2_y && p2_y <= zone2_end_y_value)) {
+                    zone2_count++;
+                  }
+                  if ((zone3_begin_x_value <= p2_x && p2_x <= zone3_end_x_value) &&
+                      (zone3_begin_y_value <= p2_y && p2_y <= zone3_end_y_value)) {
+                    zone3_count++;
+                  }
+                  if ((zone4_begin_x_value <= p2_x && p2_x <= zone4_end_x_value) &&
+                      (zone4_begin_y_value <= p2_y && p2_y <= zone4_end_y_value)) {
+                    zone4_count++;
+                  }
+                }
+                if (update_entities) {
+                  switch (id(extra_entities)) {
+                    case 5:
+                      {
+                        uint16_t p2_resolution = *((uint16_t *)(&bytes[18]));
+                        int16_t p2_speed = *((int16_t *)(&bytes[16]));
+                        if (p2_speed < 0) p2_speed += MIN_INT16_VAL;
+                        else p2_speed = -p2_speed;
+                        float p2_speed_float = p2_speed / 100.0;
+
+                        if (id(target2_speed).state != p2_speed_float) {
+                          id(target2_speed).publish_state(p2_speed_float);
+                        }
+                        if (id(target2_resolution).state != p2_resolution) {
+                          id(target2_resolution).publish_state(p2_resolution);
+                        }
+                      }
+                    case 4:
+                      p2_angle = (p2_angle * RADIANS_TO_DEGREES) - 90;
+
+                      if (id(target2_angle).state != p2_angle) {
+                        id(target2_angle).publish_state(p2_angle);
+                      }
+                      if (id(target2_distance).state != p2_distance) {
+                        id(target2_distance).publish_state(p2_distance);
+                      }
+                    case 3:
+                      id(target2_active).publish_state(true);
+                    case 2:
+                    case 1:
+                      if (id(target2_x).state != p2_x) {
+                        id(target2_x).publish_state(p2_x);
+                      }
+                      if (id(target2_y).state != p2_y) {
+                        id(target2_y).publish_state(p2_y);
+                      }
+                  }
+                }
+              }
+            }
+
+            if (update_entities && !p2_detected && !target_masked) {
+              switch (id(extra_entities)) {
+                case 5:
+                  if (id(target2_speed).state != 0) {
+                    id(target2_speed).publish_state(0);
+                  }
+                  if (id(target2_resolution).state != 0) {
+                    id(target2_resolution).publish_state(0);
+                  }
+                case 4:
+                  if (id(target2_distance).state != 0) {
+                    id(target2_distance).publish_state(0);
+                  }
+                  if (id(target2_angle).state != 0) {
+                    id(target2_angle).publish_state(0);
+                  }
+                case 3:
+                  id(target2_active).publish_state(false);
+                case 2:
+                case 1:
+                  if (id(target2_x).state != 0) {
+                    id(target2_x).publish_state(0);
+                  }
+                  if (id(target2_y).state != 0) {
+                    id(target2_y).publish_state(0);
+                  }
+              }
+            }
+
+            target_masked = false;
+
+            if (p3_detected) {
+              int16_t p3_x = *((int16_t *)(&bytes[20]));
+              if (p3_x < 0) p3_x += MIN_INT16_VAL;
+              else p3_x = -p3_x;
+
+              int16_t p3_y = *((int16_t *)(&bytes[22]));
+              if (p3_y < 0) p3_y += MIN_INT16_VAL;
+              else p3_y = -p3_y;
+
+              float p3_distance = sqrt(p3_x * p3_x + p3_y * p3_y);
+              
+              if (p3_distance > max_distance) {
+                p3_detected = false;
+              } else {
+                float p3_angle;
+                if (installation_angle != 0 || (update_entities && id(extra_entities) >= 4)) {
+                  p3_angle = atan2(p3_y, p3_x);
+                }
+                if (installation_angle != 0) {
+                  float angle = p3_angle - installation_angle;
+                  p3_x = p3_distance * cos(angle);
+                  p3_y = p3_distance * sin(angle);
+                }
+                // Apply upside-down mounting inversion if enabled
+                if (id(upside_down_mounting).state) {
+                  p3_x = -p3_x;
+                }
+                if ((occupancy_mask_1_begin_x_value <= p3_x && p3_x <= occupancy_mask_1_end_x_value) &&
+                    (occupancy_mask_1_begin_y_value <= p3_y && p3_y <= occupancy_mask_1_end_y_value)) {
+                  occupancy_mask_1_count++;
+                  p3_detected = false;
+                  target_masked = true;
+                } else if ((occupancy_mask_2_begin_x_value <= p3_x && p3_x <= occupancy_mask_2_end_x_value) &&
+                    (occupancy_mask_2_begin_y_value <= p3_y && p3_y <= occupancy_mask_2_end_y_value)) {
+                  occupancy_mask_2_count++;
+                  p3_detected = false;
+                  target_masked = true;
+                } else {
+                  if ((zone1_begin_x_value <= p3_x && p3_x <= zone1_end_x_value) &&
+                      (zone1_begin_y_value <= p3_y && p3_y <= zone1_end_y_value)) {
+                    zone1_count++;
+                  }
+                  if ((zone2_begin_x_value <= p3_x && p3_x <= zone2_end_x_value) &&
+                      (zone2_begin_y_value <= p3_y && p3_y <= zone2_end_y_value)) {
+                    zone2_count++;
+                  }
+                  if ((zone3_begin_x_value <= p3_x && p3_x <= zone3_end_x_value) &&
+                      (zone3_begin_y_value <= p3_y && p3_y <= zone3_end_y_value)) {
+                    zone3_count++;
+                  }
+                  if ((zone4_begin_x_value <= p3_x && p3_x <= zone4_end_x_value) &&
+                      (zone4_begin_y_value <= p3_y && p3_y <= zone4_end_y_value)) {
+                    zone4_count++;
+                  }
+                }
+                if (update_entities) {
+                  switch (id(extra_entities)) {
+                    case 5:
+                      {
+                        uint16_t p3_resolution = *((uint16_t *)(&bytes[26]));
+                        int16_t p3_speed = *((int16_t *)(&bytes[24]));
+                        if (p3_speed < 0) p3_speed += MIN_INT16_VAL;
+                        else p3_speed = -p3_speed;
+                        float p3_speed_float = p3_speed / 100.0;
+
+                        if (id(target3_speed).state != p3_speed_float) {
+                          id(target3_speed).publish_state(p3_speed_float);
+                        }
+                        if (id(target3_resolution).state != p3_resolution) {
+                          id(target3_resolution).publish_state(p3_resolution);
+                        }
+                      }
+                    case 4:
+                      p3_angle = (p3_angle * RADIANS_TO_DEGREES) - 90;
+                      
+                      if (id(target3_angle).state != p3_angle) {
+                        id(target3_angle).publish_state(p3_angle);
+                      }
+                      if (id(target3_distance).state != p3_distance) {
+                        id(target3_distance).publish_state(p3_distance);
+                      }
+                    case 3:
+                      id(target3_active).publish_state(true);
+                    case 2:
+                    case 1:
+                      if (id(target3_x).state != p3_x) {
+                        id(target3_x).publish_state(p3_x);
+                      }
+                      if (id(target3_y).state != p3_y) {
+                        id(target3_y).publish_state(p3_y);
+                      }
+                  }
+                }
+              }
+            }
+
+            if (update_entities && !p3_detected && !target_masked) {
+              switch (id(extra_entities)) {
+                case 5:
+                  if (id(target3_speed).state != 0) {
+                    id(target3_speed).publish_state(0);
+                  }
+                  if (id(target3_resolution).state != 0) {
+                    id(target3_resolution).publish_state(0);
+                  }
+                case 4:
+                  if (id(target3_distance).state != 0) {
+                    id(target3_distance).publish_state(0);
+                  }
+                  if (id(target3_angle).state != 0) {
+                    id(target3_angle).publish_state(0);
+                  }
+                case 3:
+                  id(target3_active).publish_state(false);
+                case 2:
+                case 1:
+                  if (id(target3_x).state != 0) {
+                    id(target3_x).publish_state(0);
+                  }
+                  if (id(target3_y).state != 0) {
+                    id(target3_y).publish_state(0);
+                  }
+              }
+            }
+
+            if (update_entities && id(extra_entities) >= 2) {
+              if (id(zone1_target_count).state != zone1_count) {
+                id(zone1_target_count).publish_state(zone1_count);
+              }
+              if (id(zone2_target_count).state != zone2_count) {
+                id(zone2_target_count).publish_state(zone2_count);
+              }
+              if (id(zone3_target_count).state != zone3_count) {
+                id(zone3_target_count).publish_state(zone3_count);
+              }
+              if (id(zone4_target_count).state != zone4_count) {
+                id(zone4_target_count).publish_state(zone4_count);
+              }
+              if (id(occupancy_mask_1_target_count).state != occupancy_mask_1_count) {
+                id(occupancy_mask_1_target_count).publish_state(occupancy_mask_1_count);
+              }
+              if (id(occupancy_mask_2_target_count).state != occupancy_mask_2_count) {
+                id(occupancy_mask_2_target_count).publish_state(occupancy_mask_2_count);
+              }
+            }
+
+            id(occupancy).publish_state(p1_detected || p2_detected || p3_detected);
+            id(zone1_occupancy).publish_state(zone1_count > 0);
+            id(zone2_occupancy).publish_state(zone2_count > 0);
+            id(zone3_occupancy).publish_state(zone3_count > 0);
+            id(zone4_occupancy).publish_state(zone4_count > 0);
+
+binary_sensor:
+  - platform: gpio
+    name: DFRobot_mmWave
+    id: DFRobot_mmwave
+    device_class: occupancy
+    pin:
+      number: GPIO34
+    on_state:
+      then:
+        - if:
+            condition:
+              - binary_sensor.is_on: DFRobot_mmwave
+              - lambda: 'return id(alarm_options).state == "mmWave only";'
+            then:
+              - switch.turn_off: alarm_relay
+        - if:
+            condition:
+              - binary_sensor.is_off: DFRobot_mmwave
+              - lambda: 'return id(alarm_options).state == "mmWave only";'
+            then:
+              - switch.turn_on: alarm_relay
+        # LED effects for presence mode
+        - if:
+            condition:
+              - binary_sensor.is_on: DFRobot_mmwave
+              - lambda: 'return id(led_mode).state == "Presence";'
+            then:
+              - if:
+                  condition:
+                    binary_sensor.is_on: pir_motion_sensor
+                  then:
+                    # Both sensors detected
+                    - light.turn_on:
+                        id: rgb_led
+                        effect: "Both Presence"
+                  else:
+                    # Only mmWave detected
+                    - light.turn_on:
+                        id: rgb_led
+                        effect: "mmWave Presence"
+        # Auto turn off LED when no presence
+        - if:
+            condition:
+              - binary_sensor.is_off: DFRobot_mmwave
+              - binary_sensor.is_off: pir_motion_sensor
+              - lambda: 'return id(led_mode).state == "Presence";'
+            then:
+              - light.turn_off:
+                  id: rgb_led
+                  transition_length: 5s
+  
+  - platform: gpio
+    name: PIR
+    id: pir_motion_sensor
+    device_class: motion
+    pin:
+      number: GPIO36
+    filters:
+      - delayed_off:  !lambda 'return id(pir_off_latency).state * 1000.0;'
+    on_state:
+      then:
+       - if:
+          condition:
+            - binary_sensor.is_on: pir_motion_sensor
+            - lambda: 'return id(alarm_options).state == "PIR only";'
+          then:
+            - switch.turn_off: alarm_relay
+       - if:
+          condition:
+            - binary_sensor.is_off: pir_motion_sensor
+            - lambda: 'return id(alarm_options).state == "PIR only";'
+          then:
+            - switch.turn_on: alarm_relay
+       # LED effects for presence mode
+       - if:
+          condition:
+            - binary_sensor.is_on: pir_motion_sensor
+            - lambda: 'return id(led_mode).state == "Presence";'
+          then:
+            - if:
+                condition:
+                  binary_sensor.is_on: DFRobot_mmwave
+                then:
+                  # Both sensors detected
+                  - light.turn_on:
+                      id: rgb_led
+                      effect: "Both Presence"
+                else:
+                  # Only PIR detected
+                  - light.turn_on:
+                      id: rgb_led
+                      effect: "PIR Presence"
+       # Auto turn off LED when no presence
+       - if:
+          condition:
+            - binary_sensor.is_off: pir_motion_sensor
+            - binary_sensor.is_off: DFRobot_mmwave
+            - lambda: 'return id(led_mode).state == "Presence";'
+          then:
+            - light.turn_off:
+                id: rgb_led
+                transition_length: 5s
+  - platform: template
+    name: Occupancy DFRobot
+    id: occupancy_dfrobot
+    device_class: occupancy
+    filters:
+      - delayed_off: !lambda 'return id(occupancy_off_latency).state * 1000.0;'
+    on_state:
+      then:
+        - if:
+            condition:
+              - binary_sensor.is_on: occupancy
+              - lambda: 'return id(alarm_options).state == "Both";'
+            then:
+              - switch.turn_off: alarm_relay
+        - if:
+            condition:
+              - binary_sensor.is_off: occupancy
+              - lambda: 'return id(alarm_options).state == "Both";'
+            then:
+              - switch.turn_on: alarm_relay
+    lambda: |-
+      if ( id(DFRobot_mmwave).state or id(pir_motion_sensor).state) {
+        return true;
+      } 
+      else if (id(DFRobot_mmwave).state == 0 and id(pir_motion_sensor).state == 0) {
+        return false;
+      } 
+      else {
+        return id(occupancy).state;
+      }
+      
+light:
+  - platform: binary
+    name: mmWave LED
+    restore_mode: RESTORE_DEFAULT_OFF
+    output: mmwave_led_output
+    entity_category: config
+    disabled_by_default: False
+  - platform: esp32_rmt_led_strip
+    id: rgb_led
+    rgb_order: GRB
+    pin: GPIO2
+    num_leds: 1
+    chipset: sk6812
+    name: "RGB LED"
+    effects:
+      - pulse:
+          name: "Pulse"
+          transition_length: 1s
+          update_interval: 1s
+      - pulse:
+          name: "Environmental Pulse"
+          transition_length: 2s
+          update_interval: 2s
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 1s
+          update_interval: 1s
+          min_brightness: 30%
+          max_brightness: 70%
+      - pulse:
+          name: "Presence Flash"
+          transition_length: 200ms
+          update_interval: 200ms
+          min_brightness: 30%
+          max_brightness: 80%
+      # Add API connection status effect
+      - strobe:
+          name: "API Disconnected"
+          colors:
+            - state: true
+              brightness: 30%
+              red: 100%
+              green: 0%
+              blue: 100%
+              white: 0%
+              duration: 500ms
+            - state: false
+              duration: 2000ms
+      - strobe:
+          name: "Fast Strobe"
+          colors:
+            - state: true
+              brightness: 100%
+              red: 100%
+              green: 0%
+              blue: 0%
+              white: 0%
+              duration: 100ms
+            - state: false
+              duration: 100ms
+      - strobe:
+          name: "Security Strobe"
+          colors:
+            - state: true
+              brightness: 100%
+              red: 100%
+              green: 0%
+              blue: 0%
+              white: 0%
+              duration: 500ms
+            - state: false
+              duration: 500ms
+      - pulse:
+          name: "Breathing"
+          transition_length: 1.5s
+          update_interval: 1.5s
+      - pulse:
+          name: "Security Breathing"
+          transition_length: 3s
+          update_interval: 3s
+          min_brightness: 20%
+          max_brightness: 60%
+      # Improved Presence effects with better visibility
+      - strobe:
+          name: "PIR Presence"
+          colors:
+            - state: true
+              brightness: 60%
+              red: 0%
+              green: 100%
+              blue: 0%
+              white: 0%
+              duration: 1000ms
+            - state: false
+              duration: 500ms
+      - strobe:
+          name: "mmWave Presence"
+          colors:
+            - state: true
+              brightness: 60%
+              red: 0%
+              green: 100%
+              blue: 100%
+              white: 0%
+              duration: 1000ms
+            - state: false
+              duration: 500ms
+      - strobe:
+          name: "Both Presence"
+          colors:
+            - state: true
+              brightness: 70%
+              red: 100%
+              green: 100%
+              blue: 100%
+              white: 100%
+              duration: 1000ms
+            - state: false
+              duration: 500ms
+
+select:
+  - platform: template
+    name: Alarm Behaviour
+    id: alarm_options
+    optimistic: True
+    options:
+      - "No output"
+      - "PIR only"
+      - "mmWave only"
+      - "Both"
+    initial_option: "No output"
+    restore_value: true
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(alarm_options).state == "No output";'
+            then:
+              - switch.turn_off: alarm_relay
+        - if:
+            condition:
+              lambda: 'return id(alarm_options).state == "No output";'
+            then:
+              - switch.turn_on: alarm_relay
+
+# Add LED Mode select component
+  - platform: template
+    name: "LED Mode"
+    id: led_mode
+    optimistic: true
+    options:
+      - "Manual Control"
+      - "Environmental"
+      - "Presence"
+    initial_option: "Manual Control"
+    restore_value: true
+    icon: mdi:led-variant
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(led_mode).state == "Manual Control";'
+            then:
+              - logger.log: "Setting LED to Manual Control mode"
+        
+        - if:
+            condition:
+              lambda: 'return id(led_mode).state == "Environmental";'
+            then:
+              - logger.log: "Setting LED to Environmental mode"
+              - script.execute: update_environmental_led
+        
+        - if:
+            condition:
+              lambda: 'return id(led_mode).state == "Presence";'
+            then:
+              - logger.log: "Setting LED to Presence mode"
+              - light.turn_off: rgb_led
+
+
+# Simplify scripts
+script:
+  - id: update_led_state
+    then:
+      - if:
+          condition:
+            lambda: 'return id(led_mode).state == "Manual Control";'
+          then:
+            - logger.log: "Setting LED to Manual Control mode"
+      
+      - if:
+          condition:
+            lambda: 'return id(led_mode).state == "Environmental";'
+          then:
+            - logger.log: "Setting LED to Environmental mode"
+            - script.execute: update_environmental_led
+      
+      - if:
+          condition:
+            lambda: 'return id(led_mode).state == "Presence";'
+          then:
+            - logger.log: "Setting LED to Presence mode"
+            - light.turn_off: rgb_led
+
+  # Keep the environmental_led script
+  - id: update_environmental_led
+    then:
+      # Simple CO2-based environmental lighting using built-in conditionals
+      - if:
+          condition:
+            sensor.in_range:
+              id: co2
+              below: 800
+          then:
+            # Good CO2 level - solid green (no pulse)
+            - light.turn_on:
+                id: rgb_led
+                brightness: 30%
+                red: 0%
+                green: 100%
+                blue: 0%
+                white: 0%
+                effect: none
+      - if:
+          condition:
+            sensor.in_range:
+              id: co2
+              above: 799
+              below: 1200
+          then:
+            # Moderate CO2 level - amber/yellow with pulse
+            - light.turn_on:
+                id: rgb_led
+                brightness: 40%
+                red: 100%
+                green: 65%
+                blue: 0%
+                white: 0%
+            - delay: 50ms
+            - light.turn_on:
+                id: rgb_led
+                effect: "Environmental Pulse"
+      - if:
+          condition:
+            sensor.in_range:
+              id: co2
+              above: 1199
+          then:
+            # High CO2 level - red with faster pulse
+            - light.turn_on:
+                id: rgb_led
+                brightness: 50%
+                red: 100%
+                green: 0%
+                blue: 0%
+                white: 0%
+            - delay: 50ms
+            - light.turn_on:
+                id: rgb_led
+                effect: "Fast Pulse"
+
+output:
+  - platform: template
+    id: mmwave_led_output
+    type: binary
+    write_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - if:
+          condition:
+            lambda: !lambda return state;
+          then:
+            - uart.write: 
+                id: uart_bus_dfrobot
+                data: "setLedMode 1 0"
+          else:
+            - uart.write: 
+                id: uart_bus_dfrobot
+                data: "setLedMode 1 1"
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 3s
+      - switch.turn_on: mmwave_sensor
+
+switch:
+  - platform: template
+    name: mmWave sensor
+    id: mmwave_sensor
+    disabled_by_default: True
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "sensorStart"
+      - delay: 1s
+    turn_off_action:
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "sensorStop"
+      - delay: 1s
+
+  - platform: template
+    name: UART presence output
+    id: uart_presence_output
+    entity_category: config
+    disabled_by_default: true
+    optimistic: true
+    turn_on_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "setUartOutput 1 1"
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 3s
+      - switch.turn_on: mmwave_sensor
+    turn_off_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "setUartOutput 1 0"
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 3s
+      - switch.turn_on: mmwave_sensor
+
+  - platform: template
+    name: UART target output
+    id: uart_target_output
+    entity_category: config
+    disabled_by_default: true
+    optimistic: true
+    assumed_state: false
+    turn_on_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "setUartOutput 2 1 1 1"
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 3s
+      - switch.turn_on: mmwave_sensor
+    turn_off_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "setUartOutput 2 0"
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 3s
+      - switch.turn_on: mmwave_sensor
+
+  - platform: gpio
+    name: "Alarm Output"
+    id: alarm_relay
+    pin:
+      number: 12
+      inverted: FALSE
+
+  - platform: template
+    name: "Upside Down Mounting"
+    id: upside_down_mounting
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: True
+    entity_category: config
+    icon: "mdi:rotate-180"
+
+number:
+  - platform: template
+    name: Occupancy off latency
+    icon: mdi:clock-end
+    entity_category: config
+    id: occupancy_off_latency
+    min_value: 1
+    max_value: 600
+    initial_value: 15
+    optimistic: true
+    step: 5
+    restore_value: true
+    unit_of_measurement: seconds
+    mode: slider
+
+  - platform: template
+    name: PIR off latency
+    icon: mdi:clock-end
+    entity_category: config
+    id: pir_off_latency
+    min_value: 1
+    max_value: 120
+    initial_value: 10
+    optimistic: true
+    step: 1
+    restore_value: true
+    unit_of_measurement: seconds
+    mode: slider
+
+  - platform: template
+    id: mmwave_distance_min
+    name: mmWave Minimum Distance
+    icon: mdi:arrow-left-right
+    entity_category: config
+    min_value: 0
+    max_value: 25
+    initial_value: 0
+    optimistic: true
+    step: 0.1
+    restore_value: true
+    unit_of_measurement: m
+    mode: slider
+
+  - platform: template
+    id: mmwave_distance_max
+    name: mmWave Max Distance
+    icon: mdi:arrow-left-right
+    entity_category: config
+    min_value: 0
+    max_value: 25
+    initial_value: 12
+    optimistic: true
+    step: 0.1
+    restore_value: true
+    unit_of_measurement: m
+    mode: slider
+
+  - platform: template
+    name: mmWave Trigger Distance
+    icon: mdi:radar
+    id: mmwave_trigger_distance
+    entity_category: config
+    min_value: 0
+    max_value: 25
+    initial_value: 6
+    optimistic: true
+    step: 0.1
+    restore_value: true
+    unit_of_measurement: m
+    mode: slider
+    set_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: !lambda |-
+            std::string mss = "setTrigRange " + to_string(x);
+            return std::vector<unsigned char>(mss.begin(), mss.end());
+      - delay: 1s
+      - uart.write:
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 1s
+      - switch.turn_on: mmwave_sensor
+
+  - platform: template
+    name: mmWave off latency
+    icon: mdi:clock-end
+    entity_category: config
+    id: mmwave_off_latency
+    min_value: 1
+    max_value: 600
+    initial_value: 15
+    optimistic: true
+    step: 5
+    restore_value: true
+    unit_of_measurement: seconds
+    mode: slider
+    set_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: !lambda |-
+            std::string mss = "setLatency " + to_string(id(mmwave_on_latency).state) + " " + to_string(id(mmwave_off_latency).state);
+            return std::vector<unsigned char>(mss.begin(), mss.end());
+      - delay: 1s
+      - uart.write:
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 1s
+      - switch.turn_on: mmwave_sensor
+
+  - platform: template
+    name: mmWave on latency
+    icon: mdi:clock-start
+    id: mmwave_on_latency
+    entity_category: config
+    min_value: 0
+    max_value: 2
+    initial_value: 0
+    optimistic: true
+    step: 0.25
+    restore_value: true
+    unit_of_measurement: seconds
+    mode: slider
+    set_action:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write:   
+          id: uart_bus_dfrobot
+          data: !lambda |-
+            std::string mss = "setLatency " + to_string(id(mmwave_on_latency).state) + " " + to_string(id(mmwave_off_latency).state);
+            return std::vector<unsigned char>(mss.begin(), mss.end());
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 1s
+      - switch.turn_on: mmwave_sensor
+
+  - platform: template
+    name: mmWave Sustain Sensitivity
+    icon: mdi:target-variant
+    id: mmwave_sensitivity
+    entity_category: config
+    min_value: 0
+    max_value: 9
+    initial_value: 7
+    optimistic: true
+    step: 1
+    restore_value: true
+
+  - platform: template
+    name: mmWave Trigger Sensitivity
+    icon: mdi:target-variant
+    id: mmwave_trigger_sensitivity
+    entity_category: config
+    min_value: 0
+    max_value: 9
+    initial_value: 5
+    optimistic: true
+    step: 1
+    restore_value: true
+
+  - platform: template
+    name: "Temperature Offset"
+    id: temperature_offset_ui
+    unit_of_measurement: "°C"
+    min_value: -20
+    max_value: 20
+    step: 0.1
+    mode: box
+    update_interval: never
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    icon: "mdi:thermometer"
+    entity_category: config
+    on_value:
+      - lambda: 'id(shtc3_sensor).update();'
+
+  - platform: template
+    name: "Humidity Offset"
+    id: humidity_offset_ui
+    unit_of_measurement: "%"
+    min_value: -50
+    max_value: 50
+    step: 0.1
+    mode: box
+    update_interval: never
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    icon: "mdi:water-percent"
+    entity_category: config
+    on_value:
+      - lambda: 'id(shtc3_sensor).update();'
+
+  - platform: template
+    name: "Illuminance Offset"
+    id: illuminance_offset_ui
+    unit_of_measurement: "lx"
+    min_value: -50
+    max_value: 50
+    step: 1
+    mode: box
+    update_interval: never
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    icon: "mdi:brightness-5"
+    entity_category: config
+    on_value:
+      - lambda: 'id(illuminance_sensor).update();'    
+
+button:
+  - platform: template
+    name: "Calibrate CO2"
+    id: calibrate_scd40
+    on_press:
+      - scd4x.perform_forced_calibration:
+          value: 419
+          id: scd40
+  - platform: template
+    name: "Set Distance"
+    id: set_distance
+    entity_category: config
+    on_press:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: !lambda
+            std::string ms = "setRange " + to_string(id(mmwave_distance_min).state) + " " + to_string(id(mmwave_distance_max).state);
+            return std::vector<unsigned char>(ms.begin(), ms.end());
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 1s
+      - switch.turn_on: mmwave_sensor
+ 
+  - platform: template
+    name: "Set Sensitivity"
+    id: set_sensitivity
+    entity_category: config
+    on_press:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write:
+          id: uart_bus_dfrobot
+          data: 
+            !lambda std::string mss = "setSensitivity " + to_string(id(mmwave_sensitivity).state) + " " + to_string(id(mmwave_trigger_sensitivity).state);
+            return std::vector<unsigned char>(mss.begin(), mss.end());
+      - delay: 1s
+      - uart.write:
+          id: uart_bus_dfrobot
+          data: "saveConfig"
+      - delay: 1s
+      - switch.turn_on: mmwave_sensor
+
+  - platform: template
+    name: Restart mmWave Sensor
+    id: restart_mmwave
+    entity_category: config
+    internal: true
+    on_press:
+      - uart.write:
+          id: uart_bus_dfrobot
+          data: "resetSystem"
+  - platform: template
+    name: Factory Reset mmWave
+    icon: mdi:cog-counterclockwise
+    id: factory_reset_mmwave
+    disabled_by_default: true
+    entity_category: config
+    on_press:
+      - switch.turn_off: mmwave_sensor
+      - delay: 1s
+      - uart.write: 
+          id: uart_bus_dfrobot
+          data: "resetCfg"
+      - delay: 3s
+      - switch.turn_on: mmwave_sensor
+  - platform: restart
+    name: "Restart device"
