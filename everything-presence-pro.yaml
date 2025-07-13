@@ -1237,9 +1237,9 @@ switch:
       inverted: FALSE
 
   - platform: template
-    name: "Upside Down Mounting"
+    name: "Upside Mounted"
     id: upside_down_mounting
-    restore_mode: RESTORE_DEFAULT_OFF
+    restore_mode: RESTORE_DEFAULT_ON
     optimistic: True
     entity_category: config
     icon: "mdi:rotate-180"
