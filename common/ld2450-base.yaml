@@ -340,7 +340,8 @@ number:
     step: 10
     optimistic: True
     restore_value: True
-    disabled_by_default: false
+    disabled_by_default: true
+    entity_category: config
   - platform: template
     name: "Zone 2 End X"
     id: ld2450_zone2_end_x
@@ -351,6 +352,7 @@ number:
     optimistic: True
     restore_value: True
     disabled_by_default: true
+    entity_category: config
   - platform: template
     name: "Zone 2 Start Y"
     id: ld2450_zone2_begin_y
@@ -361,6 +363,7 @@ number:
     optimistic: True
     restore_value: True
     disabled_by_default: true
+    entity_category: config
   - platform: template
     name: "Zone 2 End Y"
     id: ld2450_zone2_end_y
@@ -371,6 +374,7 @@ number:
     optimistic: True
     restore_value: True
     disabled_by_default: true
+    entity_category: config
   - platform: template
     name: "Zone 2 Timeout"
     id: ld2450_zone2_off_delay
@@ -382,6 +386,7 @@ number:
     unit_of_measurement: "s"
     initial_value: 15
     disabled_by_default: true
+    entity_category: config
 
   - platform: template
     name: "Zone 3 Start X"
