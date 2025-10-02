@@ -80,7 +80,7 @@ button:
     disabled_by_default: True
     on_press: 
       then:
-      - switch.turn_on: mmwave_configuration
+      - switch.turn_on: ld2450_configuration
       - delay: 1s
       - uart.write:
           id: uart_bus
@@ -92,11 +92,11 @@ button:
             int firmware_minor = response[12];
             char firmware_version_str[32];
             sprintf(firmware_version_str, "V%d.%02d", firmware_major, firmware_minor);
-            id(firmware_version).publish_state(std::string(firmware_version_str));
+            id(ld2450_firmware).publish_state(std::string(firmware_version_str));
           } else {
-            id(firmware_version).publish_state("Unknown");
+            id(ld2450_firmware).publish_state("Unknown");
           }
-      - switch.turn_off: mmwave_configuration
+      - switch.turn_off: ld2450_configuration
       - delay: 1s
   - platform: template
     name: "Reboot Zones Sensor"
@@ -105,7 +105,7 @@ button:
     entity_category: config
     on_press:
       then:
-      - switch.turn_on: mmwave_configuration
+      - switch.turn_on: ld2450_configuration
       - delay: 1s  
       - uart.write:
           id: uart_bus
@@ -118,15 +118,15 @@ button:
     on_press:
       then:
       - logger.log: "Performing Factory Reset"
-      - switch.turn_on: mmwave_configuration
+      - switch.turn_on: ld2450_configuration
       - delay: 2s
       - uart.write:
           id: uart_bus
           data: [0xFD, 0xFC, 0xFB, 0xFA, 0x02, 0x00, 0xA2, 0x00, 0x04, 0x03, 0x02, 0x01]
       - delay: 2s
-      - switch.turn_off: mmwave_configuration
+      - switch.turn_off: ld2450_configuration
       - delay: 2s
-      - button.press: reboot_mmwave_sensor
+      - button.press: reboot_ld2450_sensor
 
 switch:
   - platform: template
@@ -153,26 +153,26 @@ switch:
     disabled_by_default: True
     entity_category: config
     turn_on_action:
-      - switch.turn_on: mmwave_configuration
+      - switch.turn_on: ld2450_configuration
       - delay: 2s
       - uart.write:
           id: uart_bus
           data: [0xFD, 0xFC, 0xFB, 0xFA, 0x04, 0x00, 0xA4, 0x00, 0x01, 0x00, 0x04, 0x03, 0x02, 0x01]  # Turn on Bluetooth
       - delay: 2s
-      - button.press: reboot_mmwave_sensor  # Reboot after enabling Bluetooth
+      - button.press: reboot_ld2450_sensor  # Reboot after enabling Bluetooth
       - delay: 2s
-      - switch.turn_off: mmwave_configuration
+      - switch.turn_off: ld2450_configuration
 
     turn_off_action:
-      - switch.turn_on: mmwave_configuration
+      - switch.turn_on: ld2450_configuration
       - delay: 2s
       - uart.write:
           id: uart_bus
           data: [0xFD, 0xFC, 0xFB, 0xFA, 0x04, 0x00, 0xA4, 0x00, 0x00, 0x00, 0x04, 0x03, 0x02, 0x01]  # Turn off Bluetooth
       - delay: 2s
-      - button.press: reboot_mmwave_sensor  # Reboot after enabling Bluetooth
+      - button.press: reboot_ld2450_sensor  # Reboot after enabling Bluetooth
       - delay: 2s
-      - switch.turn_off: mmwave_configuration
+      - switch.turn_off: ld2450_configuration
 
   - platform: template
     name: "Auto-Clear Stuck Targets"
@@ -804,12 +804,12 @@ select:
             id(extra_entities) = i;
             
             if (i < 5) {  // If not using Speed and Resolution
-              id(target1_speed).publish_state(NAN);
-              id(target2_speed).publish_state(NAN);
-              id(target3_speed).publish_state(NAN);
-              id(target1_resolution).publish_state(NAN);
-              id(target2_resolution).publish_state(NAN);
-              id(target3_resolution).publish_state(NAN);
+              id(ld2450_target1_speed).publish_state(NAN);
+              id(ld2450_target2_speed).publish_state(NAN);
+              id(ld2450_target3_speed).publish_state(NAN);
+              id(ld2450_target1_resolution).publish_state(NAN);
+              id(ld2450_target2_resolution).publish_state(NAN);
+              id(ld2450_target3_resolution).publish_state(NAN);
             }
             
             if (i < 4) {  // If not using Distance and Angle
@@ -892,44 +892,44 @@ uart:
           const static float DEGREES_TO_RADIANS = 3.14159265358979323846 / 180.0;
           const static int16_t MIN_INT16_VAL = -32768;
 
-          float max_distance = float(id(distance).state) * 10;
-          float installation_angle = id(installation_angle_ui).state * DEGREES_TO_RADIANS;
+          float max_distance = float(id(ld2450_max_distance).state) * 10;
+          float installation_angle = id(ld2450_installation_angle).state * DEGREES_TO_RADIANS;
 
           // Extracted for consistency of read values
           int zone1_count = 0;
-          int zone1_begin_x_value = min(id(zone1_begin_x).state, id(zone1_end_x).state);
-          int zone1_end_x_value = max(id(zone1_begin_x).state, id(zone1_end_x).state);
-          int zone1_begin_y_value = min(id(zone1_begin_y).state, id(zone1_end_y).state);
-          int zone1_end_y_value = max(id(zone1_begin_y).state, id(zone1_end_y).state);
+          int zone1_begin_x_value = min(id(ld2450_zone1_begin_x).state, id(ld2450_zone1_end_x).state);
+          int zone1_end_x_value = max(id(ld2450_zone1_begin_x).state, id(ld2450_zone1_end_x).state);
+          int zone1_begin_y_value = min(id(ld2450_zone1_begin_y).state, id(ld2450_zone1_end_y).state);
+          int zone1_end_y_value = max(id(ld2450_zone1_begin_y).state, id(ld2450_zone1_end_y).state);
 
           int zone2_count = 0;
-          int zone2_begin_x_value = min(id(zone2_begin_x).state, id(zone2_end_x).state);
-          int zone2_end_x_value = max(id(zone2_begin_x).state, id(zone2_end_x).state);
-          int zone2_begin_y_value = min(id(zone2_begin_y).state, id(zone2_end_y).state);
-          int zone2_end_y_value = max(id(zone2_begin_y).state, id(zone2_end_y).state);
+          int zone2_begin_x_value = min(id(ld2450_zone2_begin_x).state, id(ld2450_zone2_end_x).state);
+          int zone2_end_x_value = max(id(ld2450_zone2_begin_x).state, id(ld2450_zone2_end_x).state);
+          int zone2_begin_y_value = min(id(ld2450_zone2_begin_y).state, id(ld2450_zone2_end_y).state);
+          int zone2_end_y_value = max(id(ld2450_zone2_begin_y).state, id(ld2450_zone2_end_y).state);
 
           int zone3_count = 0;
-          int zone3_begin_x_value = min(id(zone3_begin_x).state, id(zone3_end_x).state);
-          int zone3_end_x_value = max(id(zone3_begin_x).state, id(zone3_end_x).state);
-          int zone3_begin_y_value = min(id(zone3_begin_y).state, id(zone3_end_y).state);
-          int zone3_end_y_value = max(id(zone3_begin_y).state, id(zone3_end_y).state);
+          int zone3_begin_x_value = min(id(ld2450_zone3_begin_x).state, id(ld2450_zone3_end_x).state);
+          int zone3_end_x_value = max(id(ld2450_zone3_begin_x).state, id(ld2450_zone3_end_x).state);
+          int zone3_begin_y_value = min(id(ld2450_zone3_begin_y).state, id(ld2450_zone3_end_y).state);
+          int zone3_end_y_value = max(id(ld2450_zone3_begin_y).state, id(ld2450_zone3_end_y).state);
 
           int zone4_count = 0;
-          int zone4_begin_x_value = min(id(zone4_begin_x).state, id(zone4_end_x).state);
-          int zone4_end_x_value = max(id(zone4_begin_x).state, id(zone4_end_x).state);
-          int zone4_begin_y_value = min(id(zone4_begin_y).state, id(zone4_end_y).state);
-          int zone4_end_y_value = max(id(zone4_begin_y).state, id(zone4_end_y).state);
+          int zone4_begin_x_value = min(id(ld2450_zone4_begin_x).state, id(ld2450_zone4_end_x).state);
+          int zone4_end_x_value = max(id(ld2450_zone4_begin_x).state, id(ld2450_zone4_end_x).state);
+          int zone4_begin_y_value = min(id(ld2450_zone4_begin_y).state, id(ld2450_zone4_end_y).state);
+          int zone4_end_y_value = max(id(ld2450_zone4_begin_y).state, id(ld2450_zone4_end_y).state);
 
           int occupancy_mask_1_count = 0;
-          int occupancy_mask_1_begin_x_value = min(id(occupancy_mask_1_begin_x).state, id(occupancy_mask_1_end_x).state);
-          int occupancy_mask_1_end_x_value = max(id(occupancy_mask_1_begin_x).state, id(occupancy_mask_1_end_x).state);
-          int occupancy_mask_1_begin_y_value = min(id(occupancy_mask_1_begin_y).state, id(occupancy_mask_1_end_y).state);
-          int occupancy_mask_1_end_y_value = max(id(occupancy_mask_1_begin_y).state, id(occupancy_mask_1_end_y).state);
+          int occupancy_mask_1_begin_x_value = min(id(ld2450_mask1_begin_x).state, id(ld2450_mask1_end_x).state);
+          int occupancy_mask_1_end_x_value = max(id(ld2450_mask1_begin_x).state, id(ld2450_mask1_end_x).state);
+          int occupancy_mask_1_begin_y_value = min(id(ld2450_mask1_begin_y).state, id(ld2450_mask1_end_y).state);
+          int occupancy_mask_1_end_y_value = max(id(ld2450_mask1_begin_y).state, id(ld2450_mask1_end_y).state);
           int occupancy_mask_2_count = 0;
-          int occupancy_mask_2_begin_x_value = min(id(occupancy_mask_2_begin_x).state, id(occupancy_mask_2_end_x).state);
-          int occupancy_mask_2_end_x_value = max(id(occupancy_mask_2_begin_x).state, id(occupancy_mask_2_end_x).state);
-          int occupancy_mask_2_begin_y_value = min(id(occupancy_mask_2_begin_y).state, id(occupancy_mask_2_end_y).state);
-          int occupancy_mask_2_end_y_value = max(id(occupancy_mask_2_begin_y).state, id(occupancy_mask_2_end_y).state);
+          int occupancy_mask_2_begin_x_value = min(id(ld2450_mask2_begin_x).state, id(ld2450_mask2_end_x).state);
+          int occupancy_mask_2_end_x_value = max(id(ld2450_mask2_begin_x).state, id(ld2450_mask2_end_x).state);
+          int occupancy_mask_2_begin_y_value = min(id(ld2450_mask2_begin_y).state, id(ld2450_mask2_end_y).state);
+          int occupancy_mask_2_end_y_value = max(id(ld2450_mask2_begin_y).state, id(ld2450_mask2_end_y).state);
 
           bool p1_detected = *((uint16_t *)(&bytes[10])) != 0;
           bool p2_detected = *((uint16_t *)(&bytes[18])) != 0;
@@ -1001,31 +1001,31 @@ uart:
                       else p1_speed = -p1_speed;
                       float p1_speed_float = p1_speed / 100.0;
 
-                      if (id(target1_speed).state != p1_speed_float) {
-                        id(target1_speed).publish_state(p1_speed_float);
+                      if (id(ld2450_target1_speed).state != p1_speed_float) {
+                        id(ld2450_target1_speed).publish_state(p1_speed_float);
                       }
-                      if (id(target1_resolution).state != p1_resolution) {
-                        id(target1_resolution).publish_state(p1_resolution);
+                      if (id(ld2450_target1_resolution).state != p1_resolution) {
+                        id(ld2450_target1_resolution).publish_state(p1_resolution);
                       }
                     }
                   case 4:
                     p1_angle = (p1_angle * RADIANS_TO_DEGREES) - 90;
 
-                    if (id(target1_angle).state != p1_angle) {
-                      id(target1_angle).publish_state(p1_angle);
+                    if (id(ld2450_target1_angle).state != p1_angle) {
+                      id(ld2450_target1_angle).publish_state(p1_angle);
                     }
-                    if (id(target1_distance).state != p1_distance) {
-                      id(target1_distance).publish_state(p1_distance);
+                    if (id(ld2450_target1_distance).state != p1_distance) {
+                      id(ld2450_target1_distance).publish_state(p1_distance);
                     }
                   case 3:
-                    id(target1_active).publish_state(true);
+                    id(ld2450_target1_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(target1_x).state != p1_x) {
-                      id(target1_x).publish_state(p1_x);
+                    if (id(ld2450_target1_x).state != p1_x) {
+                      id(ld2450_target1_x).publish_state(p1_x);
                     }
-                    if (id(target1_y).state != p1_y) {
-                      id(target1_y).publish_state(p1_y);
+                    if (id(ld2450_target1_y).state != p1_y) {
+                      id(ld2450_target1_y).publish_state(p1_y);
                     }
                 }
               }
@@ -1035,28 +1035,28 @@ uart:
           if (update_entities && !p1_detected && !target_masked) {
             switch (id(extra_entities)) {
               case 5:
-                if (id(target1_speed).state != 0) {
-                  id(target1_speed).publish_state(0);
+                if (id(ld2450_target1_speed).state != 0) {
+                  id(ld2450_target1_speed).publish_state(0);
                 }
-                if (id(target1_resolution).state != 0) {
-                  id(target1_resolution).publish_state(0);
+                if (id(ld2450_target1_resolution).state != 0) {
+                  id(ld2450_target1_resolution).publish_state(0);
                 }
               case 4:
-                if (id(target1_distance).state != 0) {
-                  id(target1_distance).publish_state(0);
+                if (id(ld2450_target1_distance).state != 0) {
+                  id(ld2450_target1_distance).publish_state(0);
                 }
-                if (id(target1_angle).state != 0) {
-                  id(target1_angle).publish_state(0);
+                if (id(ld2450_target1_angle).state != 0) {
+                  id(ld2450_target1_angle).publish_state(0);
                 }
               case 3:
-                id(target1_active).publish_state(false);
+                id(ld2450_target1_active).publish_state(false);
               case 2:
               case 1:
-                if (id(target1_x).state != 0) {
-                  id(target1_x).publish_state(0);
+                if (id(ld2450_target1_x).state != 0) {
+                  id(ld2450_target1_x).publish_state(0);
                 }
-                if (id(target1_y).state != 0) {
-                  id(target1_y).publish_state(0);
+                if (id(ld2450_target1_y).state != 0) {
+                  id(ld2450_target1_y).publish_state(0);
                 }
             }
           }
@@ -1128,31 +1128,31 @@ uart:
                       else p2_speed = -p2_speed;
                       float p2_speed_float = p2_speed / 100.0;
 
-                      if (id(target2_speed).state != p2_speed_float) {
-                        id(target2_speed).publish_state(p2_speed_float);
+                      if (id(ld2450_target2_speed).state != p2_speed_float) {
+                        id(ld2450_target2_speed).publish_state(p2_speed_float);
                       }
-                      if (id(target2_resolution).state != p2_resolution) {
-                        id(target2_resolution).publish_state(p2_resolution);
+                      if (id(ld2450_target2_resolution).state != p2_resolution) {
+                        id(ld2450_target2_resolution).publish_state(p2_resolution);
                       }
                     }
                   case 4:
                     p2_angle = (p2_angle * RADIANS_TO_DEGREES) - 90;
 
-                    if (id(target2_angle).state != p2_angle) {
-                      id(target2_angle).publish_state(p2_angle);
+                    if (id(ld2450_target2_angle).state != p2_angle) {
+                      id(ld2450_target2_angle).publish_state(p2_angle);
                     }
-                    if (id(target2_distance).state != p2_distance) {
-                      id(target2_distance).publish_state(p2_distance);
+                    if (id(ld2450_target2_distance).state != p2_distance) {
+                      id(ld2450_target2_distance).publish_state(p2_distance);
                     }
                   case 3:
-                    id(target2_active).publish_state(true);
+                    id(ld2450_target2_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(target2_x).state != p2_x) {
-                      id(target2_x).publish_state(p2_x);
+                    if (id(ld2450_target2_x).state != p2_x) {
+                      id(ld2450_target2_x).publish_state(p2_x);
                     }
-                    if (id(target2_y).state != p2_y) {
-                      id(target2_y).publish_state(p2_y);
+                    if (id(ld2450_target2_y).state != p2_y) {
+                      id(ld2450_target2_y).publish_state(p2_y);
                     }
                 }
               }
@@ -1162,28 +1162,28 @@ uart:
           if (update_entities && !p2_detected && !target_masked) {
             switch (id(extra_entities)) {
               case 5:
-                if (id(target2_speed).state != 0) {
-                  id(target2_speed).publish_state(0);
+                if (id(ld2450_target2_speed).state != 0) {
+                  id(ld2450_target2_speed).publish_state(0);
                 }
-                if (id(target2_resolution).state != 0) {
-                  id(target2_resolution).publish_state(0);
+                if (id(ld2450_target2_resolution).state != 0) {
+                  id(ld2450_target2_resolution).publish_state(0);
                 }
               case 4:
-                if (id(target2_distance).state != 0) {
-                  id(target2_distance).publish_state(0);
+                if (id(ld2450_target2_distance).state != 0) {
+                  id(ld2450_target2_distance).publish_state(0);
                 }
-                if (id(target2_angle).state != 0) {
-                  id(target2_angle).publish_state(0);
+                if (id(ld2450_target2_angle).state != 0) {
+                  id(ld2450_target2_angle).publish_state(0);
                 }
               case 3:
-                id(target2_active).publish_state(false);
+                id(ld2450_target2_active).publish_state(false);
               case 2:
               case 1:
-                if (id(target2_x).state != 0) {
-                  id(target2_x).publish_state(0);
+                if (id(ld2450_target2_x).state != 0) {
+                  id(ld2450_target2_x).publish_state(0);
                 }
-                if (id(target2_y).state != 0) {
-                  id(target2_y).publish_state(0);
+                if (id(ld2450_target2_y).state != 0) {
+                  id(ld2450_target2_y).publish_state(0);
                 }
             }
           }
@@ -1255,31 +1255,31 @@ uart:
                       else p3_speed = -p3_speed;
                       float p3_speed_float = p3_speed / 100.0;
 
-                      if (id(target3_speed).state != p3_speed_float) {
-                        id(target3_speed).publish_state(p3_speed_float);
+                      if (id(ld2450_target3_speed).state != p3_speed_float) {
+                        id(ld2450_target3_speed).publish_state(p3_speed_float);
                       }
-                      if (id(target3_resolution).state != p3_resolution) {
-                        id(target3_resolution).publish_state(p3_resolution);
+                      if (id(ld2450_target3_resolution).state != p3_resolution) {
+                        id(ld2450_target3_resolution).publish_state(p3_resolution);
                       }
                     }
                   case 4:
                     p3_angle = (p3_angle * RADIANS_TO_DEGREES) - 90;
                     
-                    if (id(target3_angle).state != p3_angle) {
-                      id(target3_angle).publish_state(p3_angle);
+                    if (id(ld2450_target3_angle).state != p3_angle) {
+                      id(ld2450_target3_angle).publish_state(p3_angle);
                     }
-                    if (id(target3_distance).state != p3_distance) {
-                      id(target3_distance).publish_state(p3_distance);
+                    if (id(ld2450_target3_distance).state != p3_distance) {
+                      id(ld2450_target3_distance).publish_state(p3_distance);
                     }
                   case 3:
-                    id(target3_active).publish_state(true);
+                    id(ld2450_target3_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(target3_x).state != p3_x) {
-                      id(target3_x).publish_state(p3_x);
+                    if (id(ld2450_target3_x).state != p3_x) {
+                      id(ld2450_target3_x).publish_state(p3_x);
                     }
-                    if (id(target3_y).state != p3_y) {
-                      id(target3_y).publish_state(p3_y);
+                    if (id(ld2450_target3_y).state != p3_y) {
+                      id(ld2450_target3_y).publish_state(p3_y);
                     }
                 }
               }
@@ -1289,55 +1289,55 @@ uart:
           if (update_entities && !p3_detected && !target_masked) {
             switch (id(extra_entities)) {
               case 5:
-                if (id(target3_speed).state != 0) {
-                  id(target3_speed).publish_state(0);
+                if (id(ld2450_target3_speed).state != 0) {
+                  id(ld2450_target3_speed).publish_state(0);
                 }
-                if (id(target3_resolution).state != 0) {
-                  id(target3_resolution).publish_state(0);
+                if (id(ld2450_target3_resolution).state != 0) {
+                  id(ld2450_target3_resolution).publish_state(0);
                 }
               case 4:
-                if (id(target3_distance).state != 0) {
-                  id(target3_distance).publish_state(0);
+                if (id(ld2450_target3_distance).state != 0) {
+                  id(ld2450_target3_distance).publish_state(0);
                 }
-                if (id(target3_angle).state != 0) {
-                  id(target3_angle).publish_state(0);
+                if (id(ld2450_target3_angle).state != 0) {
+                  id(ld2450_target3_angle).publish_state(0);
                 }
               case 3:
-                id(target3_active).publish_state(false);
+                id(ld2450_target3_active).publish_state(false);
               case 2:
               case 1:
-                if (id(target3_x).state != 0) {
-                  id(target3_x).publish_state(0);
+                if (id(ld2450_target3_x).state != 0) {
+                  id(ld2450_target3_x).publish_state(0);
                 }
-                if (id(target3_y).state != 0) {
-                  id(target3_y).publish_state(0);
+                if (id(ld2450_target3_y).state != 0) {
+                  id(ld2450_target3_y).publish_state(0);
                 }
             }
           }
 
           if (update_entities && id(extra_entities) >= 2) {
-            if (id(zone1_target_count).state != zone1_count) {
-              id(zone1_target_count).publish_state(zone1_count);
+            if (id(ld2450_zone1_target_count).state != zone1_count) {
+              id(ld2450_zone1_target_count).publish_state(zone1_count);
             }
-            if (id(zone2_target_count).state != zone2_count) {
-              id(zone2_target_count).publish_state(zone2_count);
+            if (id(ld2450_zone2_target_count).state != zone2_count) {
+              id(ld2450_zone2_target_count).publish_state(zone2_count);
             }
-            if (id(zone3_target_count).state != zone3_count) {
-              id(zone3_target_count).publish_state(zone3_count);
+            if (id(ld2450_zone3_target_count).state != zone3_count) {
+              id(ld2450_zone3_target_count).publish_state(zone3_count);
             }
-            if (id(zone4_target_count).state != zone4_count) {
-              id(zone4_target_count).publish_state(zone4_count);
+            if (id(ld2450_zone4_target_count).state != zone4_count) {
+              id(ld2450_zone4_target_count).publish_state(zone4_count);
             }
-            if (id(occupancy_mask_1_target_count).state != occupancy_mask_1_count) {
-              id(occupancy_mask_1_target_count).publish_state(occupancy_mask_1_count);
+            if (id(ld2450_mask1_target_count).state != occupancy_mask_1_count) {
+              id(ld2450_mask1_target_count).publish_state(occupancy_mask_1_count);
             }
-            if (id(occupancy_mask_2_target_count).state != occupancy_mask_2_count) {
-              id(occupancy_mask_2_target_count).publish_state(occupancy_mask_2_count);
+            if (id(ld2450_mask2_target_count).state != occupancy_mask_2_count) {
+              id(ld2450_mask2_target_count).publish_state(occupancy_mask_2_count);
             }
           }
 
-          id(occupancy).publish_state(p1_detected || p2_detected || p3_detected);
-          id(zone1_occupancy).publish_state(zone1_count > 0);
-          id(zone2_occupancy).publish_state(zone2_count > 0);
-          id(zone3_occupancy).publish_state(zone3_count > 0);
-          id(zone4_occupancy).publish_state(zone4_count > 0);
+          id(ld2450_occupancy).publish_state(p1_detected || p2_detected || p3_detected);
+          id(ld2450_zone1_occupancy).publish_state(zone1_count > 0);
+          id(ld2450_zone2_occupancy).publish_state(zone2_count > 0);
+          id(ld2450_zone3_occupancy).publish_state(zone3_count > 0);
+          id(ld2450_zone4_occupancy).publish_state(zone4_count > 0);
