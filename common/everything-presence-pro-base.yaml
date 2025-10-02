@@ -3,6 +3,9 @@
 # Includes: PIR, Environmental sensors, LED control, System features
 
 esphome:
+  project:
+    name: EverythingSmartTechnology.Everything Presence Pro
+    version: "1.0.8"
   on_boot:
     - priority: 500 
       then:
