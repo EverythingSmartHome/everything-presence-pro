@@ -165,6 +165,17 @@ binary_sensor:
       number: GPIO36
     filters:
       - delayed_off:  !lambda 'return id(pir_off_delay).state * 1000.0;'
+    on_state:
+      then:
+        - lambda: |-
+            auto mode = id(system_alarm_mode).state;
+            if (mode == "Motion Only" || mode == "Motion or Presence") {
+              if (id(pir_motion).state) {
+                id(system_alarm_relay).turn_on();
+              } else {
+                id(system_alarm_relay).turn_off();
+              }
+            }
 
   - platform: template
     name: Occupancy
@@ -182,6 +193,17 @@ binary_sensor:
       else {
         return id(ld2450_occupancy).state;
       }
+    on_state:
+      then:
+        - lambda: |-
+            auto mode = id(system_alarm_mode).state;
+            if (mode == "Presence Only" || mode == "Motion or Presence") {
+              if (id(occupancy).state) {
+                id(system_alarm_relay).turn_on();
+              } else {
+                id(system_alarm_relay).turn_off();
+              }
+            }
 
   - platform: template
     name: mmWave Presence
@@ -323,11 +345,33 @@ select:
     restore_value: true
     on_value:
       then:
-        - if:
-            condition:
-              lambda: 'return id(system_alarm_mode).state == "Disabled";'
-            then:
-              - switch.turn_off: system_alarm_relay
+        - lambda: |-
+            auto mode = id(system_alarm_mode).state;
+
+            if (mode == "Disabled") {
+              id(system_alarm_relay).turn_off();
+            }
+            else if (mode == "Motion Only") {
+              if (id(pir_motion).state) {
+                id(system_alarm_relay).turn_on();
+              } else {
+                id(system_alarm_relay).turn_off();
+              }
+            }
+            else if (mode == "Presence Only") {
+              if (id(occupancy).state) {
+                id(system_alarm_relay).turn_on();
+              } else {
+                id(system_alarm_relay).turn_off();
+              }
+            }
+            else if (mode == "Motion or Presence") {
+              if (id(pir_motion).state || id(occupancy).state) {
+                id(system_alarm_relay).turn_on();
+              } else {
+                id(system_alarm_relay).turn_off();
+              }
+            }
 
   - platform: template
     name: "LED Mode"
