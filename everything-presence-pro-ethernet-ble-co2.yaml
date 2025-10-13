@@ -31,7 +31,7 @@ esphome:
 update:
   - platform: http_request
     name: Firmware Update
-    source: https://everythingsmarthome.github.io/everything-presence-pro/everything-presence-pro-ethernet-ble-co2-manifest.json
+    source: https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-ethernet-ble-co2-manifest.json
 
 
 sensor:

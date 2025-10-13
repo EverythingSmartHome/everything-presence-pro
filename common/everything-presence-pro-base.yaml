@@ -489,6 +489,7 @@ script:
   # Environmental LED script - placeholder for base model
   # CO2-specific logic is in the CO2 variant
   - id: update_environmental_led
+    mode: restart
     then:
       # Default environmental LED state for non-CO2 models
       - light.turn_on:
@@ -505,7 +506,7 @@ script:
     then:
       - lambda: |-
           // Build firmware URL based on selected options
-          std::string base_url = "https://everythingsmarthome.github.io/everything-presence-pro/everything-presence-pro-";
+          std::string base_url = "https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-";
           std::string filename = "";
 
           // Add network type (required)

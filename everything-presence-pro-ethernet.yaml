@@ -30,7 +30,7 @@ esphome:
 update:
   - platform: http_request
     name: Firmware Update
-    source: https://everythingsmarthome.github.io/everything-presence-pro/everything-presence-pro-ethernet-manifest.json
+    source: https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-ethernet-manifest.json
 
 # wifi:
 #   ssid: Everything Smart IoT

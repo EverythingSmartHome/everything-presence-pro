@@ -30,13 +30,9 @@ esphome:
 update:
   - platform: http_request
     name: Firmware Update
-    source: https://everythingsmarthome.github.io/everything-presence-pro/everything-presence-pro-wifi-co2-manifest.json
+    source: https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-wifi-co2-manifest.json
 
 wifi:
-  ap:
-    ssid: "Everything Presence Pro"
-
-captive_portal:
 
 improv_serial:
 
