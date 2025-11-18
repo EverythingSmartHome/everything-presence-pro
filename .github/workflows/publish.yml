@@ -9,11 +9,16 @@ on:
     paths:
       - '**.yaml'
 
+permissions:
+  contents: write
+  pages: write
+
 jobs:
   # Ethernet variants
   publish-epp-ethernet:
     name: Publish Everything Presence Pro Ethernet
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-ethernet.yaml
       name: Everything Presence Pro Ethernet
@@ -25,6 +30,7 @@ jobs:
   publish-epp-ethernet-ble:
     name: Publish Everything Presence Pro Ethernet BLE
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-ethernet-ble.yaml
       name: Everything Presence Pro Ethernet BLE
@@ -36,6 +42,7 @@ jobs:
   publish-epp-ethernet-co2:
     name: Publish Everything Presence Pro Ethernet CO₂
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-ethernet-co2.yaml
       name: Everything Presence Pro Ethernet CO₂
@@ -47,6 +54,7 @@ jobs:
   publish-epp-ethernet-ble-co2:
     name: Publish Everything Presence Pro Ethernet BLE CO₂
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-ethernet-ble-co2.yaml
       name: Everything Presence Pro Ethernet BLE CO₂
@@ -59,6 +67,7 @@ jobs:
   publish-epp-wifi:
     name: Publish Everything Presence Pro WiFi
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-wifi.yaml
       name: Everything Presence Pro WiFi
@@ -70,6 +79,7 @@ jobs:
   publish-epp-wifi-ble:
     name: Publish Everything Presence Pro WiFi BLE
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-wifi-ble.yaml
       name: Everything Presence Pro WiFi BLE
@@ -81,6 +91,7 @@ jobs:
   publish-epp-wifi-co2:
     name: Publish Everything Presence Pro WiFi CO₂
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-wifi-co2.yaml
       name: Everything Presence Pro WiFi CO₂
@@ -92,6 +103,7 @@ jobs:
   publish-epp-wifi-ble-co2:
     name: Publish Everything Presence Pro WiFi BLE CO₂
     uses: EverythingSmartHome/everything-presence-lite/.github/workflows/esphome-build.yml@main
+    secrets: inherit
     with:
       files: everything-presence-pro-wifi-ble-co2.yaml
       name: Everything Presence Pro WiFi BLE CO₂
