@@ -1,0 +1,21 @@
+{
+  "name": "Everything Presence Pro WiFi BLE CO₂",
+  "version": "1.1.2",
+  "home_assistant_domain": "esphome",
+  "new_install_skip_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "ota": {
+        "path": "everything-presence-pro-wifi-ble-co2/everything-presence-pro-esp32.ota.bin",
+        "md5": "395fe33edc7f3fa06842f3f74d3b85b4"
+      },
+      "parts": [
+        {
+          "path": "everything-presence-pro-wifi-ble-co2/everything-presence-pro-esp32.factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
