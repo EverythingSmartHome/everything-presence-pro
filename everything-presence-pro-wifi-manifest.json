@@ -1,0 +1,21 @@
+{
+  "name": "Everything Presence Pro WiFi",
+  "version": "1.1.2",
+  "home_assistant_domain": "esphome",
+  "new_install_skip_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "ota": {
+        "path": "everything-presence-pro-wifi/everything-presence-pro-esp32.ota.bin",
+        "md5": "677ec9267f0d99aaac9f0a6852d2bfd8"
+      },
+      "parts": [
+        {
+          "path": "everything-presence-pro-wifi/everything-presence-pro-esp32.factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
