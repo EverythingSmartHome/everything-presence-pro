@@ -8,7 +8,7 @@
       "chipFamily": "ESP32",
       "ota": {
         "path": "everything-presence-pro-ethernet-ble/everything-presence-pro-esp32.ota.bin",
-        "md5": "78b7c6aa82245edf38254aab82f8a48d"
+        "md5": "e4adc020d01bf52f4e27376a63245b3a"
       },
       "parts": [
         {
