@@ -100,15 +100,6 @@ ota:
 debug:
   update_interval: 5s
 
-text_sensor:
-  - platform: debug
-    device:
-      name: "Device Info"
-      entity_category: diagnostic
-    reset_reason:
-      name: "Reset Reason"
-      entity_category: diagnostic
-
 sensor:
   - platform: shtcx
     id: "shtc3_sensor"
@@ -827,6 +818,7 @@ button:
 
           ESP_LOGI("firmware", "Switching to manifest: %s", base_url.c_str());
           id(update_http_request).set_source_url(base_url.c_str());
+      - component.update: update_http_request
       - delay: 2s
       - update.perform:
           id: update_http_request
