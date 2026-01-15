@@ -7,6 +7,10 @@ substitutions:
   uart_presence_output_disabled: "true"
   log_level: "DEBUG"
 
+dashboard_import:
+  package_import_url: github://everythingsmarthome/everything-presence-pro/everything-presence-pro-ethernet-co2.yaml@main
+  import_full_config: false
+
 esp32:
   board: esp32dev
   framework:
@@ -37,3 +41,4 @@ update:
     id: update_http_request
     name: Firmware Update
     source: https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-ethernet-co2-manifest.json
+
