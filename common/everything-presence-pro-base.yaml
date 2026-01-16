@@ -8,7 +8,6 @@ esphome:
         - delay: 200ms
         - script.execute: update_relay_state
         # Start loading animation and keep it until API connects
-        - lambda: 'id(api_connected_flag) = false;'
         - light.turn_on:
             id: led_rgb
             brightness: 30%
@@ -19,10 +18,10 @@ esphome:
             effect: "Network Connecting"
 
 globals:
-  - id: api_connected_flag
-    type: bool
+  - id: api_connected_count
+    type: int
     restore_value: no
-    initial_value: 'false'
+    initial_value: '0'
   - id: init_in_progress
     type: bool
     restore_value: no
@@ -35,7 +34,9 @@ logger:
 api:
   on_client_connected:
     then:
-      - lambda: 'id(init_in_progress) = false; id(api_connected_flag) = true;'
+      - lambda: |
+          id(init_in_progress) = false;
+          id(api_connected_count) += 1;
       - if:
           condition:
             lambda: 'return id(led_mode_select).state != "Manual Control";'
@@ -86,7 +87,8 @@ api:
 
   on_client_disconnected:
     then:
-      - lambda: 'id(api_connected_flag) = false;'
+      - lambda: |
+          id(api_connected_count) -= 1;
       - script.execute: control_leds
 
 http_request:
@@ -401,8 +403,8 @@ script:
     mode: restart
     then:
       - lambda: |
-          ESP_LOGD("control_leds", "Called - init_in_progress: %d, api_connected: %d, led_mode: %s",
-                   id(init_in_progress), id(api_connected_flag), id(led_mode_select).state.c_str());
+          ESP_LOGD("control_leds", "Called - init_in_progress: %d, api_connected_count: %d, led_mode: %s",
+                   id(init_in_progress), id(api_connected_count), id(led_mode_select).state.c_str());
 
           // Initialization/connection phase
           if (id(init_in_progress)) {
@@ -410,7 +412,7 @@ script:
             id(control_leds_connecting).execute();
           }
           // No API connection
-          else if (!id(api_connected_flag)) {
+          else if (id(api_connected_count) == 0) {
             ESP_LOGD("control_leds", "Executing control_leds_connecting (no API)");
             id(control_leds_connecting).execute();
           }
@@ -690,7 +692,7 @@ number:
         # Refresh LED state when brightness changes
         - if:
             condition:
-              lambda: 'return id(led_mode_select).state != "Manual Control" && id(api_connected_flag);'
+              lambda: 'return id(led_mode_select).state != "Manual Control" && id(api_connected_count) == 0;'
             then:
               - script.execute: control_leds
 
