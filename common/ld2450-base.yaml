@@ -289,6 +289,7 @@ number:
     restore_value: True
     unit_of_measurement: "s"
     initial_value: 15
+    entity_category: config
   - platform: template
     name: "Tracking Detection Range"
     id: ld2450_max_distance
@@ -453,6 +454,7 @@ number:
     optimistic: True
     restore_value: True
     initial_value: 4000
+    entity_category: config
   - platform: template
     name: "Zone 1 Start Y"
     id: ld2450_zone1_begin_y
@@ -467,6 +469,7 @@ number:
   - platform: template
     name: "Zone 1 End Y"
     id: ld2450_zone1_end_y
+    entity_category: config
     max_value: 6000
     min_value: -1560
     unit_of_measurement: "mm"

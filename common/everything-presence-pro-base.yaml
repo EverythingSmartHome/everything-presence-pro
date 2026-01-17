@@ -174,7 +174,7 @@ binary_sensor:
             auto mode = id(system_alarm_mode).current_option();
             if (mode == "Motion Only" || mode == "Motion or Presence") {
               bool activate = id(pir_motion).state;
-              bool desired = (id(relay_contact_mode).state == "Normally Open (NO)") ? activate : !activate;
+              bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
               if (desired) {
                 id(system_alarm_relay).turn_on();
               } else {
@@ -204,7 +204,7 @@ binary_sensor:
             auto mode = id(system_alarm_mode).current_option();
             if (mode == "Presence Only" || mode == "Motion or Presence") {
               bool activate = id(occupancy).state;
-              bool desired = (id(relay_contact_mode).state == "Normally Open (NO)") ? activate : !activate;
+              bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
               if (desired) {
                 id(system_alarm_relay).turn_on();
               } else {
@@ -429,7 +429,7 @@ script:
     mode: restart
     then:
       - lambda: |-
-          auto mode = id(system_alarm_mode).state;
+          auto mode = id(system_alarm_mode).current_option();
           bool activate = false;
 
           if (mode == "Motion Only") {
@@ -440,7 +440,7 @@ script:
             activate = id(pir_motion).state || id(occupancy).state;
           }
 
-          bool desired = (id(relay_contact_mode).state == "Normally Open (NO)") ? activate : !activate;
+          bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
 
           if (desired) {
             id(system_alarm_relay).turn_on();
