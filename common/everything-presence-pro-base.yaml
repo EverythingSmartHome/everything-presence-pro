@@ -18,10 +18,6 @@ esphome:
             effect: "Network Connecting"
 
 globals:
-  - id: api_connected_count
-    type: int
-    restore_value: no
-    initial_value: '0'
   - id: init_in_progress
     type: bool
     restore_value: no
@@ -32,11 +28,11 @@ logger:
 
 # Enable Home Assistant API
 api:
+  id: api_id
   on_client_connected:
     then:
       - lambda: |
           id(init_in_progress) = false;
-          id(api_connected_count) += 1;
       - if:
           condition:
             lambda: 'return id(led_mode_select).state != "Manual Control";'
@@ -87,8 +83,6 @@ api:
 
   on_client_disconnected:
     then:
-      - lambda: |
-          id(api_connected_count) -= 1;
       - script.execute: control_leds
 
 http_request:
@@ -403,8 +397,8 @@ script:
     mode: restart
     then:
       - lambda: |
-          ESP_LOGD("control_leds", "Called - init_in_progress: %d, api_connected_count: %d, led_mode: %s",
-                   id(init_in_progress), id(api_connected_count), id(led_mode_select).state.c_str());
+          ESP_LOGD("control_leds", "Called - init_in_progress: %d, api_connected (subscribed): %d, led_mode: %s",
+                   id(init_in_progress), id(api_id).is_connected(true), id(led_mode_select).state.c_str());
 
           // Initialization/connection phase
           if (id(init_in_progress)) {
@@ -412,7 +406,7 @@ script:
             id(control_leds_connecting).execute();
           }
           // No API connection
-          else if (id(api_connected_count) == 0) {
+          else if (id(api_id).is_connected(true) == false) {
             ESP_LOGD("control_leds", "Executing control_leds_connecting (no API)");
             id(control_leds_connecting).execute();
           }
@@ -692,7 +686,7 @@ number:
         # Refresh LED state when brightness changes
         - if:
             condition:
-              lambda: 'return id(led_mode_select).state != "Manual Control" && id(api_connected_count) == 0;'
+              lambda: 'return id(led_mode_select).state != "Manual Control" && id(api_id).is_connected(true) == false;'
             then:
               - script.execute: control_leds
 
