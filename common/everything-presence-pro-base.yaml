@@ -318,33 +318,7 @@ select:
     restore_value: true
     on_value:
       then:
-        - lambda: |-
-            auto mode = id(system_alarm_mode).current_option();
-
-            if (mode == "Disabled") {
-              id(system_alarm_relay).turn_off();
-            }
-            else if (mode == "Motion Only") {
-              if (id(pir_motion).state) {
-                id(system_alarm_relay).turn_on();
-              } else {
-                id(system_alarm_relay).turn_off();
-              }
-            }
-            else if (mode == "Presence Only") {
-              if (id(occupancy).state) {
-                id(system_alarm_relay).turn_on();
-              } else {
-                id(system_alarm_relay).turn_off();
-              }
-            }
-            else if (mode == "Motion or Presence") {
-              if (id(pir_motion).state || id(occupancy).state) {
-                id(system_alarm_relay).turn_on();
-              } else {
-                id(system_alarm_relay).turn_off();
-              }
-            }
+        - script.execute: update_relay_state
 
   - platform: template
     name: "LED Mode"
