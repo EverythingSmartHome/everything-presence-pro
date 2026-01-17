@@ -9,7 +9,7 @@ sensor:
         then:
           - if:
               condition:
-                lambda: 'return id(led_mode_select).state == "Environmental" || id(led_mode_select).state == "Environmental + Presence";'
+                lambda: 'return id(led_mode_select).current_option() == "Environmental" || id(led_mode_select).current_option() == "Environmental + Presence";'
               then:
                 - script.execute: control_leds
     automatic_self_calibration: false
