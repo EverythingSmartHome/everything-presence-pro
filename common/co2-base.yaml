@@ -1,0 +1,30 @@
+sensor:
+  - platform: scd4x
+    i2c_id: bus_b
+    id: scd40
+    co2:
+      name: "CO2"
+      id: "co2"
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return id(led_mode_select).state == "Environmental" || id(led_mode_select).state == "Environmental + Presence";'
+              then:
+                - script.execute: control_leds
+    automatic_self_calibration: false
+
+i2c:
+  - id: bus_b
+    scl: GPIO16
+    sda: GPIO4
+    scan: true
+
+button:
+  - platform: template
+    name: "Calibrate CO2"
+    id: calibrate_scd40
+    on_press:
+      - scd4x.perform_forced_calibration:
+          value: 419
+          id: scd40

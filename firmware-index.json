@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-01-18T14:15:21.302Z",
+  "product": {
+    "id": "everything-presence-pro",
+    "displayName": "Everything Presence Pro",
+    "latestVersion": "1.1.3"
+  },
+  "firmwares": [
+    {
+      "version": "1.1.3",
+      "channel": "stable",
+      "releaseDate": "2026-01-18",
+      "releaseNotes": "",
+      "minPreviousVersion": "1.0.0",
+      "variants": [
+        {
+          "id": "epp-ethernet-ble-co2",
+          "manifestUrl": "everything-presence-pro-ethernet-ble-co2-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": true,
+            "co2_enabled": true,
+            "bluetooth_enabled": true,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        },
+        {
+          "id": "epp-ethernet-ble",
+          "manifestUrl": "everything-presence-pro-ethernet-ble-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": true,
+            "co2_enabled": false,
+            "bluetooth_enabled": true,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        },
+        {
+          "id": "epp-ethernet-co2",
+          "manifestUrl": "everything-presence-pro-ethernet-co2-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": true,
+            "co2_enabled": true,
+            "bluetooth_enabled": false,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        },
+        {
+          "id": "epp-ethernet",
+          "manifestUrl": "everything-presence-pro-ethernet-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": true,
+            "co2_enabled": false,
+            "bluetooth_enabled": false,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        },
+        {
+          "id": "epp-wifi-ble-co2",
+          "manifestUrl": "everything-presence-pro-wifi-ble-co2-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": false,
+            "co2_enabled": true,
+            "bluetooth_enabled": true,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        },
+        {
+          "id": "epp-wifi-ble",
+          "manifestUrl": "everything-presence-pro-wifi-ble-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": false,
+            "co2_enabled": false,
+            "bluetooth_enabled": true,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        },
+        {
+          "id": "epp-wifi-co2",
+          "manifestUrl": "everything-presence-pro-wifi-co2-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": false,
+            "co2_enabled": true,
+            "bluetooth_enabled": false,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        },
+        {
+          "id": "epp-wifi",
+          "manifestUrl": "everything-presence-pro-wifi-manifest.json",
+          "requirements": {
+            "model": "everything-presence-pro",
+            "ethernet_enabled": false,
+            "co2_enabled": false,
+            "bluetooth_enabled": false,
+            "board_revision": "1.8",
+            "sensor_variant": "ld2450+sen0609",
+            "firmware_channel": "stable"
+          }
+        }
+      ]
+    }
+  ],
+  "migrations": [
+    {
+      "id": "rectangular-to-polygon-zones",
+      "fromVersion": "<2.0.0",
+      "toVersion": ">=2.0.0",
+      "description": "Rectangular zones replaced with polygon zones",
+      "backupRequired": true,
+      "handler": "rectangularToPolygon"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+substitutions:
+  name: "everything-presence-pro"
+  friendly_name: "Everything Presence Pro"
+  hidden_ssid: "false"
+  factory_reset_disabled: "true"
+  uart_target_output_disabled: "true"
+  uart_presence_output_disabled: "true"
+  log_level: "DEBUG"
+
+  device_config:
+    ethernet_enabled: true
+    co2_enabled: true
+    bluetooth_enabled: true
+    board_revision: "1.8"
+    sensor_variant: "ld2450+sen0609"
+    firmware_channel: "stable"
+    model: "everything-presence-pro"
+
+dashboard_import:
+  package_import_url: github://everythingsmarthome/everything-presence-pro/everything-presence-pro-ethernet-ble-co2.yaml@main
+  import_full_config: false
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+    version: recommended
+
+packages:
+   pro_base: !include common/everything-presence-pro-base.yaml
+   ld2450_base: !include common/ld2450-base.yaml
+   sen0609_base: !include common/sen0609-base.yaml
+   ethernet_base: !include common/ethernet-base.yaml
+   bluetooth_base: !include common/bluetooth-base.yaml
+   co2_base: !include common/co2-base.yaml
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: True
+  on_boot:
+    - priority: -100
+      then:
+        - lambda: |-
+            id(firmware_network).publish_state("Ethernet");
+            id(firmware_co2).publish_state("Enabled");
+            id(firmware_ble).publish_state("Enabled");
+
+update:
+  - platform: http_request
+    id: update_http_request
+    name: Firmware Update
+    source: http://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-ethernet-ble-co2-manifest.json
+
