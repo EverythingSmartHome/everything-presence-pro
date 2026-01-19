@@ -29,10 +29,6 @@ globals:
     type: unsigned long
     initial_value: '0'
     restore_value: False
-  - id: target1_reset
-    type: int
-    initial_value: "1"
-    restore_value: False
   - id: entities_update_count
     type: unsigned int
     restore_value: False
@@ -59,17 +55,13 @@ interval:
   - interval: 1s
     then:
       - lambda: |-
-          unsigned long now = millis();
-          unsigned long timeout_ms = (unsigned long)(id(ld2450_stale_timeout).state * 1000);
-          if (id(ld2450_stale_reset).state) {
-            if ((now - id(target1_last_update)) > timeout_ms) {
-              if (id(target1_reset) == 0) {
-                if (id(ld2450_target1_active).state == true) {
-                  ESP_LOGD("custom", "No update in 3s, clearing");
-                  id(reboot_ld2450_sensor).press();
-                  id(target1_reset) = 1;
-                }
-              }
+          if (id(ld2450_stale_reset).state && id(extra_entities) >= 3) {
+            unsigned long now = millis();
+            unsigned long timeout_ms = (unsigned long)(id(ld2450_stale_timeout).state * 1000);
+            if ((now - id(target1_last_update)) > timeout_ms && id(ld2450_target1_active).state == true) {
+              ESP_LOGD("LD2450", "Stale target, clearing");
+              id(reboot_ld2450_sensor).press();
+              id(target1_last_update) = now + 3000; //Prevent another reset for at least 3s
             }
           }
 
@@ -760,10 +752,11 @@ uart:
       sequence:
       # - lambda: UARTDebug::log_hex(direction, bytes, ' ');
       - lambda: |-
-          if ((millis() - id(mmwave_update_time)) <= id(mmwave_update_interval)) { 
+          unsigned long now = millis();
+          if ((now - id(mmwave_update_time)) <= id(mmwave_update_interval)) { 
             return;
           };
-          id(mmwave_update_time) = millis();
+          id(mmwave_update_time) = now;
 
           if (bytes.size() != 30) {
             ESP_LOGW("LD2450", "Expected 30 bytes but received %hu!", bytes.size());
@@ -925,11 +918,10 @@ uart:
                     id(ld2450_target1_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(ld2450_target1_x).state != p1_x) {
+                    if (id(ld2450_target1_x).state != p1_x || id(ld2450_target1_y).state != p1_y) {
                       id(ld2450_target1_x).publish_state(p1_x);
-                    }
-                    if (id(ld2450_target1_y).state != p1_y) {
                       id(ld2450_target1_y).publish_state(p1_y);
+                      id(target1_last_update) = now;
                     }
                 }
               }
@@ -956,10 +948,8 @@ uart:
                 id(ld2450_target1_active).publish_state(false);
               case 2:
               case 1:
-                if (id(ld2450_target1_x).state != 0) {
+                if (id(ld2450_target1_x).state != 0 || id(ld2450_target1_y).state != 0) {
                   id(ld2450_target1_x).publish_state(0);
-                }
-                if (id(ld2450_target1_y).state != 0) {
                   id(ld2450_target1_y).publish_state(0);
                 }
             }
@@ -1038,10 +1028,8 @@ uart:
                     id(ld2450_target2_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(ld2450_target2_x).state != p2_x) {
+                    if (id(ld2450_target2_x).state != p2_x || id(ld2450_target2_y).state != p2_y) {
                       id(ld2450_target2_x).publish_state(p2_x);
-                    }
-                    if (id(ld2450_target2_y).state != p2_y) {
                       id(ld2450_target2_y).publish_state(p2_y);
                     }
                 }
@@ -1069,10 +1057,8 @@ uart:
                 id(ld2450_target2_active).publish_state(false);
               case 2:
               case 1:
-                if (id(ld2450_target2_x).state != 0) {
+                if (id(ld2450_target2_x).state != 0 || id(ld2450_target2_y).state != 0) {
                   id(ld2450_target2_x).publish_state(0);
-                }
-                if (id(ld2450_target2_y).state != 0) {
                   id(ld2450_target2_y).publish_state(0);
                 }
             }
@@ -1152,10 +1138,8 @@ uart:
                     id(ld2450_target3_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(ld2450_target3_x).state != p3_x) {
+                    if (id(ld2450_target3_x).state != p3_x || id(ld2450_target3_y).state != p3_y) {
                       id(ld2450_target3_x).publish_state(p3_x);
-                    }
-                    if (id(ld2450_target3_y).state != p3_y) {
                       id(ld2450_target3_y).publish_state(p3_y);
                     }
                 }
@@ -1183,10 +1167,8 @@ uart:
                 id(ld2450_target3_active).publish_state(false);
               case 2:
               case 1:
-                if (id(ld2450_target3_x).state != 0) {
+                if (id(ld2450_target3_x).state != 0 || id(ld2450_target3_y).state != 0) {
                   id(ld2450_target3_x).publish_state(0);
-                }
-                if (id(ld2450_target3_y).state != 0) {
                   id(ld2450_target3_y).publish_state(0);
                 }
             }
