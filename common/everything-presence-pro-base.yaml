@@ -431,7 +431,7 @@ script:
             id(control_leds_connecting).execute();
           }
           // No API connection
-          else if (id(api_id).is_connected(true) == false) {
+          else if (!id(api_id).is_connected(true)) {
             ESP_LOGD("control_leds", "Executing control_leds_connecting (no API)");
             id(control_leds_connecting).execute();
           }
@@ -711,7 +711,7 @@ number:
         # Refresh LED state when brightness changes
         - if:
             condition:
-              lambda: 'return id(led_mode_select).state != "Manual Control" && id(api_id).is_connected(true) == false;'
+              lambda: 'return id(led_mode_select).state != "Manual Control" && id(api_id).is_connected(true);'
             then:
               - script.execute: control_leds
 
