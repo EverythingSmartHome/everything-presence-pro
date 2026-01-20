@@ -29,10 +29,6 @@ globals:
     type: unsigned long
     initial_value: '0'
     restore_value: False
-  - id: target1_reset
-    type: int
-    initial_value: "1"
-    restore_value: False
   - id: entities_update_count
     type: unsigned int
     restore_value: False
@@ -45,23 +41,27 @@ globals:
     type: unsigned int
     restore_value: False
     initial_value: '0'
+  - id: last_zone_hold
+    type: int
+    restore_value: False
+    initial_value: '0'
+  - id: poly_initialized
+    type: bool
+    restore_value: False
+    initial_value: 'false'
 
 
 interval:
   - interval: 1s
     then:
       - lambda: |-
-          unsigned long now = millis();
-          unsigned long timeout_ms = (unsigned long)(id(ld2450_stale_timeout).state * 1000);
-          if (id(ld2450_stale_reset).state) {
-            if ((now - id(target1_last_update)) > timeout_ms) {
-              if (id(target1_reset) == 0) {
-                if (id(ld2450_target1_active).state == true) {
-                  ESP_LOGD("custom", "No update in 3s, clearing");
-                  id(reboot_ld2450_sensor).press();
-                  id(target1_reset) = 1;
-                }
-              }
+          if (id(ld2450_stale_reset).state && id(extra_entities) >= 3) {
+            unsigned long now = millis();
+            unsigned long timeout_ms = (unsigned long)(id(ld2450_stale_timeout).state * 1000);
+            if ((now - id(target1_last_update)) > timeout_ms && id(ld2450_target1_active).state == true) {
+              ESP_LOGD("LD2450", "Stale target, clearing");
+              id(reboot_ld2450_sensor).press();
+              id(target1_last_update) = now + 3000; //Prevent another reset for at least 3s
             }
           }
 
@@ -182,6 +182,13 @@ switch:
     entity_category: config
 
   - platform: template
+    name: "Enable Assumed Presence"
+    id: ld2450_assumed_presence
+    restore_mode: RESTORE_DEFAULT_OFF 
+    optimistic: True
+    entity_category: config
+
+  - platform: template
     name: "Upside Down Mounting"
     id: ld2450_upside_down
     restore_mode: RESTORE_DEFAULT_OFF
@@ -228,21 +235,24 @@ binary_sensor:
   - platform: template
     name: "Target 1 Active"
     id: ld2450_target1_active
-    disabled_by_default: true
+    entity_category: diagnostic
   - platform: template
     name: "Target 2 Active"
     id: ld2450_target2_active
-    disabled_by_default: true
+    entity_category: diagnostic
   - platform: template
     name: "Target 3 Active"
     id: ld2450_target3_active
-    disabled_by_default: true
+    entity_category: diagnostic
+  - platform: template
+    name: "Assumed Present"
+    id: assumed_present
+    entity_category: diagnostic
 
 number:
   - platform: template
     name: "Tracking Presence Timeout"
     id: ld2450_off_delay
-    entity_category: config
     max_value: 600
     min_value: 0
     step: 1
@@ -250,6 +260,7 @@ number:
     restore_value: True
     unit_of_measurement: "s"
     initial_value: 15
+    entity_category: config
   - platform: template
     name: "Tracking Detection Range"
     id: ld2450_max_distance
@@ -276,50 +287,6 @@ number:
     icon: "mdi:angle-acute"
 
   - platform: template
-    name: "Zone 1 Start X"
-    id: ld2450_zone1_begin_x
-    entity_category: config
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    initial_value: -4000
-  - platform: template
-    name: "Zone 1 End X"
-    id: ld2450_zone1_end_x
-    entity_category: config
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    initial_value: 4000
-  - platform: template
-    name: "Zone 1 Start Y"
-    id: ld2450_zone1_begin_y
-    entity_category: config
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    initial_value: 0
-  - platform: template
-    name: "Zone 1 End Y"
-    id: ld2450_zone1_end_y
-    entity_category: config
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    initial_value: 6000
-  - platform: template
     name: "Zone 1 Timeout"
     id: ld2450_zone1_off_delay
     entity_category: config
@@ -331,50 +298,6 @@ number:
     unit_of_measurement: "s"
     initial_value: 15
 
-  - platform: template
-    name: "Zone 2 Start X"
-    id: ld2450_zone2_begin_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 2 End X"
-    id: ld2450_zone2_end_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 2 Start Y"
-    id: ld2450_zone2_begin_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 2 End Y"
-    id: ld2450_zone2_end_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
   - platform: template
     name: "Zone 2 Timeout"
     id: ld2450_zone2_off_delay
@@ -389,50 +312,6 @@ number:
     entity_category: config
 
   - platform: template
-    name: "Zone 3 Start X"
-    id: ld2450_zone3_begin_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 3 End X"
-    id: ld2450_zone3_end_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 3 Start Y"
-    id: ld2450_zone3_begin_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 3 End Y"
-    id: ld2450_zone3_end_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
     name: "Zone 3 Timeout"
     id: ld2450_zone3_off_delay
     max_value: 600
@@ -446,50 +325,6 @@ number:
     entity_category: config
 
   - platform: template
-    name: "Zone 4 Start X"
-    id: ld2450_zone4_begin_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 4 End X"
-    id: ld2450_zone4_end_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 4 Start Y"
-    id: ld2450_zone4_begin_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Zone 4 End Y"
-    id: ld2450_zone4_end_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
     name: "Zone 4 Timeout"
     id: ld2450_zone4_off_delay
     max_value: 600
@@ -499,91 +334,6 @@ number:
     restore_value: True
     unit_of_measurement: "s"
     initial_value: 15
-    disabled_by_default: true
-    entity_category: config
-
-  - platform: template
-    name: "Exclusion Zone 1 Start X"
-    id: ld2450_mask1_begin_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    entity_category: config
-  - platform: template
-    name: "Exclusion Zone 1 End X"
-    id: ld2450_mask1_end_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    entity_category: config
-  - platform: template
-    name: "Exclusion Zone 1 Start Y"
-    id: ld2450_mask1_begin_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    entity_category: config
-  - platform: template
-    name: "Exclusion Zone 1 End Y"
-    id: ld2450_mask1_end_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    entity_category: config
-  - platform: template
-    name: "Exclusion Zone 2 Start X"
-    id: ld2450_mask2_begin_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Exclusion Zone 2 End X"
-    id: ld2450_mask2_end_x
-    max_value: 6000
-    min_value: -6000
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Exclusion Zone 2 Start Y"
-    id: ld2450_mask2_begin_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
-    disabled_by_default: true
-    entity_category: config
-  - platform: template
-    name: "Exclusion Zone 2 End Y"
-    id: ld2450_mask2_end_y
-    max_value: 6000
-    min_value: -1560
-    unit_of_measurement: "mm"
-    step: 10
-    optimistic: True
-    restore_value: True
     disabled_by_default: true
     entity_category: config
 
@@ -607,6 +357,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 1 Y"
     id: ld2450_target1_y
@@ -614,6 +365,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 1 Speed"
     id: ld2450_target1_speed
@@ -621,6 +373,7 @@ sensor:
     unit_of_measurement: 'm/s'
     state_class: measurement
     device_class: speed
+    entity_category: diagnostic
   - platform: template
     name: "Target 1 Resolution"
     id: ld2450_target1_resolution
@@ -628,6 +381,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 2 X"
     id: ld2450_target2_x
@@ -635,6 +389,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 2 Y"
     id: ld2450_target2_y
@@ -642,6 +397,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 2 Speed"
     id: ld2450_target2_speed
@@ -649,6 +405,7 @@ sensor:
     unit_of_measurement: 'm/s'
     state_class: measurement
     device_class: speed
+    entity_category: diagnostic
   - platform: template
     name: "Target 2 Resolution"
     id: ld2450_target2_resolution
@@ -656,6 +413,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 3 X"
     id: ld2450_target3_x
@@ -663,6 +421,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 3 Y"
     id: ld2450_target3_y
@@ -670,6 +429,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 3 Speed"
     id: ld2450_target3_speed
@@ -677,6 +437,7 @@ sensor:
     unit_of_measurement: 'm/s'
     state_class: measurement
     device_class: speed
+    entity_category: diagnostic
   - platform: template
     name: "Target 3 Resolution"
     id: ld2450_target3_resolution
@@ -684,24 +445,28 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 1 Angle"
     id: ld2450_target1_angle
     accuracy_decimals: 0
     unit_of_measurement: '°'
     state_class: measurement
+    entity_category: diagnostic
   - platform: template
     name: "Target 2 Angle"
     id: ld2450_target2_angle
     accuracy_decimals: 0
     unit_of_measurement: '°'
     state_class: measurement
+    entity_category: diagnostic
   - platform: template
     name: "Target 3 Angle"
     id: ld2450_target3_angle
     accuracy_decimals: 0
     unit_of_measurement: '°'
     state_class: measurement
+    entity_category: diagnostic
   - platform: template
     name: "Target 1 Distance"
     id: ld2450_target1_distance
@@ -709,6 +474,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 2 Distance"
     id: ld2450_target2_distance
@@ -716,6 +482,7 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Target 3 Distance"
     id: ld2450_target3_distance
@@ -723,45 +490,52 @@ sensor:
     unit_of_measurement: 'mm'
     state_class: measurement
     device_class: distance
+    entity_category: diagnostic
   - platform: template
     name: "Zone 1 Target Count"
     id: ld2450_zone1_target_count
     accuracy_decimals: 0
     unit_of_measurement: " "
+    entity_category: diagnostic
   - platform: template
     name: "Zone 2 Target Count"
     id: ld2450_zone2_target_count
     accuracy_decimals: 0
     disabled_by_default: true
     unit_of_measurement: " "
+    entity_category: diagnostic
   - platform: template
     name: "Zone 3 Target Count"
     id: ld2450_zone3_target_count
     accuracy_decimals: 0
     disabled_by_default: true
     unit_of_measurement: " "
+    entity_category: diagnostic
   - platform: template
     name: "Zone 4 Target Count"
     id: ld2450_zone4_target_count
     accuracy_decimals: 0
     disabled_by_default: true
     unit_of_measurement: " "
+    entity_category: diagnostic
   - platform: template
     name: "Exclusion Zone 1 Target Count"
     id: ld2450_mask1_target_count
     accuracy_decimals: 0
     disabled_by_default: true
     unit_of_measurement: " "
+    entity_category: diagnostic
   - platform: template
     name: "Exclusion Zone 2 Target Count"
     id: ld2450_mask2_target_count
     accuracy_decimals: 0
     disabled_by_default: true
     unit_of_measurement: " "
+    entity_category: diagnostic
 
 select:
   - platform: template
-    name: 'Tracking Update Rate'
+    name: 'Update speed'
     icon: 'mdi:speedometer'
     optimistic: true
     restore_value: true
@@ -825,7 +599,7 @@ select:
       then:
         - lambda: |-
             id(extra_entities) = i;
-
+            
             if (i < 5) {  // If not using Speed and Resolution
               id(ld2450_target1_speed).publish_state(NAN);
               id(ld2450_target2_speed).publish_state(NAN);
@@ -834,7 +608,7 @@ select:
               id(ld2450_target2_resolution).publish_state(NAN);
               id(ld2450_target3_resolution).publish_state(NAN);
             }
-
+            
             if (i < 4) {  // If not using Distance and Angle
               id(ld2450_target1_distance).publish_state(NAN);
               id(ld2450_target2_distance).publish_state(NAN);
@@ -843,13 +617,13 @@ select:
               id(ld2450_target2_angle).publish_state(NAN);
               id(ld2450_target3_angle).publish_state(NAN);
             }
-
+            
             if (i < 3) {  // If not using Targets active
               id(ld2450_target1_active).publish_state(false);
               id(ld2450_target2_active).publish_state(false);
               id(ld2450_target3_active).publish_state(false);
             }
-
+            
             if (i < 2) {  // If not using Zone count
               id(ld2450_zone1_target_count).publish_state(NAN);
               id(ld2450_zone2_target_count).publish_state(NAN);
@@ -858,7 +632,7 @@ select:
               id(ld2450_mask1_target_count).publish_state(NAN);
               id(ld2450_mask2_target_count).publish_state(NAN);
             }
-
+            
             if (i < 1) {  // If using None
               id(ld2450_target1_x).publish_state(NAN);
               id(ld2450_target1_y).publish_state(NAN);
@@ -868,14 +642,100 @@ select:
               id(ld2450_target3_y).publish_state(NAN);
             }
 
+text:
+  - platform: template
+    name: "Polygon Zone 1"
+    id: poly_zone_1
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value: 
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+  - platform: template
+    name: "Polygon Zone 2"
+    id: poly_zone_2
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value: 
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+  - platform: template
+    name: "Polygon Zone 3"
+    id: poly_zone_3
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value: 
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+  - platform: template
+    name: "Polygon Zone 4"
+    id: poly_zone_4
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value: 
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+  - platform: template
+    name: "Polygon Exclusion 1"
+    id: poly_exclusion_1
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value: 
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+  - platform: template
+    name: "Polygon Exclusion 2"
+    id: poly_exclusion_2
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value: 
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+
 uart:
   - id: uart_bus
-    tx_pin:
+    tx_pin: 
       number: GPIO13
       mode:
         input: true
         pullup: true
-    rx_pin:
+    rx_pin: 
       number: GPIO14
       mode:
         input: true
@@ -885,17 +745,18 @@ uart:
     stop_bits: 1
     data_bits: 8
     debug:
-      direction: BOTH
+      direction: RX
       dummy_receiver: True
       after:
         delimiter: [0X55, 0XCC]
       sequence:
       # - lambda: UARTDebug::log_hex(direction, bytes, ' ');
       - lambda: |-
-          if ((millis() - id(mmwave_update_time)) <= id(mmwave_update_interval)) { 
+          unsigned long now = millis();
+          if ((now - id(mmwave_update_time)) <= id(mmwave_update_interval)) { 
             return;
           };
-          id(mmwave_update_time) = millis();
+          id(mmwave_update_time) = now;
 
           if (bytes.size() != 30) {
             ESP_LOGW("LD2450", "Expected 30 bytes but received %hu!", bytes.size());
@@ -918,41 +779,68 @@ uart:
           float max_distance = float(id(ld2450_max_distance).state) * 10;
           float installation_angle = id(ld2450_installation_angle).state * DEGREES_TO_RADIANS;
 
+          const static int MAX_POLY_VERTICES = 20;
+
+          struct ParsedPolygon {
+            float vx[20];
+            float vy[20];
+            int count;
+          };
+
+          static ParsedPolygon poly_zones[4];
+          static ParsedPolygon poly_exclusions[2];
+
+          auto parse_polygon_text = [](const std::string& text, ParsedPolygon& poly) {
+            poly.count = 0;
+            if (text.empty()) return;
+
+            size_t pos = 0;
+            while (pos < text.length() && poly.count < 20) {
+              int x, y;
+              int chars_read;
+              if (sscanf(text.c_str() + pos, "%d:%d%n", &x, &y, &chars_read) == 2) {
+                poly.vx[poly.count] = (float)x;
+                poly.vy[poly.count] = (float)y;
+                poly.count++;
+                pos += chars_read;
+                if (pos < text.length() && text[pos] == ';') pos++;
+              } else {
+                break;
+              }
+            }
+          };
+
+          auto point_in_poly = [](float px, float py, const ParsedPolygon& poly) -> bool {
+            if (poly.count < 3) return false;
+
+            bool inside = false;
+            for (int i = 0, j = poly.count - 1; i < poly.count; j = i++) {
+              float xi = poly.vx[i], yi = poly.vy[i];
+              float xj = poly.vx[j], yj = poly.vy[j];
+
+              if (((yi > py) != (yj > py)) &&
+                  (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+              }
+            }
+            return inside;
+          };
+
+          if (!id(poly_initialized)) {
+            parse_polygon_text(id(poly_zone_1).state, poly_zones[0]);
+            parse_polygon_text(id(poly_zone_2).state, poly_zones[1]);
+            parse_polygon_text(id(poly_zone_3).state, poly_zones[2]);
+            parse_polygon_text(id(poly_zone_4).state, poly_zones[3]);
+            parse_polygon_text(id(poly_exclusion_1).state, poly_exclusions[0]);
+            parse_polygon_text(id(poly_exclusion_2).state, poly_exclusions[1]);
+            id(poly_initialized) = true;
+            ESP_LOGD("LD2450", "Init polys");
+          }
+
           // Extracted for consistency of read values
-          int zone1_count = 0;
-          int zone1_begin_x_value = min(id(ld2450_zone1_begin_x).state, id(ld2450_zone1_end_x).state);
-          int zone1_end_x_value = max(id(ld2450_zone1_begin_x).state, id(ld2450_zone1_end_x).state);
-          int zone1_begin_y_value = min(id(ld2450_zone1_begin_y).state, id(ld2450_zone1_end_y).state);
-          int zone1_end_y_value = max(id(ld2450_zone1_begin_y).state, id(ld2450_zone1_end_y).state);
+          int zone_counts[] = {0,0,0,0};
+          int zone_exclusion_counts[] = {0,0};
 
-          int zone2_count = 0;
-          int zone2_begin_x_value = min(id(ld2450_zone2_begin_x).state, id(ld2450_zone2_end_x).state);
-          int zone2_end_x_value = max(id(ld2450_zone2_begin_x).state, id(ld2450_zone2_end_x).state);
-          int zone2_begin_y_value = min(id(ld2450_zone2_begin_y).state, id(ld2450_zone2_end_y).state);
-          int zone2_end_y_value = max(id(ld2450_zone2_begin_y).state, id(ld2450_zone2_end_y).state);
-
-          int zone3_count = 0;
-          int zone3_begin_x_value = min(id(ld2450_zone3_begin_x).state, id(ld2450_zone3_end_x).state);
-          int zone3_end_x_value = max(id(ld2450_zone3_begin_x).state, id(ld2450_zone3_end_x).state);
-          int zone3_begin_y_value = min(id(ld2450_zone3_begin_y).state, id(ld2450_zone3_end_y).state);
-          int zone3_end_y_value = max(id(ld2450_zone3_begin_y).state, id(ld2450_zone3_end_y).state);
-
-          int zone4_count = 0;
-          int zone4_begin_x_value = min(id(ld2450_zone4_begin_x).state, id(ld2450_zone4_end_x).state);
-          int zone4_end_x_value = max(id(ld2450_zone4_begin_x).state, id(ld2450_zone4_end_x).state);
-          int zone4_begin_y_value = min(id(ld2450_zone4_begin_y).state, id(ld2450_zone4_end_y).state);
-          int zone4_end_y_value = max(id(ld2450_zone4_begin_y).state, id(ld2450_zone4_end_y).state);
-
-          int occupancy_mask_1_count = 0;
-          int occupancy_mask_1_begin_x_value = min(id(ld2450_mask1_begin_x).state, id(ld2450_mask1_end_x).state);
-          int occupancy_mask_1_end_x_value = max(id(ld2450_mask1_begin_x).state, id(ld2450_mask1_end_x).state);
-          int occupancy_mask_1_begin_y_value = min(id(ld2450_mask1_begin_y).state, id(ld2450_mask1_end_y).state);
-          int occupancy_mask_1_end_y_value = max(id(ld2450_mask1_begin_y).state, id(ld2450_mask1_end_y).state);
-          int occupancy_mask_2_count = 0;
-          int occupancy_mask_2_begin_x_value = min(id(ld2450_mask2_begin_x).state, id(ld2450_mask2_end_x).state);
-          int occupancy_mask_2_end_x_value = max(id(ld2450_mask2_begin_x).state, id(ld2450_mask2_end_x).state);
-          int occupancy_mask_2_begin_y_value = min(id(ld2450_mask2_begin_y).state, id(ld2450_mask2_end_y).state);
-          int occupancy_mask_2_end_y_value = max(id(ld2450_mask2_begin_y).state, id(ld2450_mask2_end_y).state);
 
           bool p1_detected = *((uint16_t *)(&bytes[10])) != 0;
           bool p2_detected = *((uint16_t *)(&bytes[18])) != 0;
@@ -986,33 +874,19 @@ uart:
                 p1_x = p1_distance * cos(angle);
                 p1_y = p1_distance * sin(angle);
               }
-              if ((occupancy_mask_1_begin_x_value <= p1_x && p1_x <= occupancy_mask_1_end_x_value) &&
-                  (occupancy_mask_1_begin_y_value <= p1_y && p1_y <= occupancy_mask_1_end_y_value)) {
-                occupancy_mask_1_count++;
+              if (point_in_poly(p1_x, p1_y, poly_exclusions[0])) {
+                zone_exclusion_counts[0]++;
                 p1_detected = false;
                 target_masked = true;
-              } else if ((occupancy_mask_2_begin_x_value <= p1_x && p1_x <= occupancy_mask_2_end_x_value) &&
-                  (occupancy_mask_2_begin_y_value <= p1_y && p1_y <= occupancy_mask_2_end_y_value)) {
-                occupancy_mask_2_count++;
+              } else if (point_in_poly(p1_x, p1_y, poly_exclusions[1])) {
+                zone_exclusion_counts[1]++;
                 p1_detected = false;
                 target_masked = true;
               } else {
-                if ((zone1_begin_x_value <= p1_x && p1_x <= zone1_end_x_value) &&
-                    (zone1_begin_y_value <= p1_y && p1_y <= zone1_end_y_value)) {
-                  zone1_count++;
-                }
-                if ((zone2_begin_x_value <= p1_x && p1_x <= zone2_end_x_value) &&
-                    (zone2_begin_y_value <= p1_y && p1_y <= zone2_end_y_value)) {
-                  zone2_count++;
-                }
-                if ((zone3_begin_x_value <= p1_x && p1_x <= zone3_end_x_value) &&
-                    (zone3_begin_y_value <= p1_y && p1_y <= zone3_end_y_value)) {
-                  zone3_count++;
-                }
-                if ((zone4_begin_x_value <= p1_x && p1_x <= zone4_end_x_value) &&
-                    (zone4_begin_y_value <= p1_y && p1_y <= zone4_end_y_value)) {
-                  zone4_count++;
-                }
+                if (point_in_poly(p1_x, p1_y, poly_zones[0])) { zone_counts[0]++; id(last_zone_hold) = 1; }
+                if (point_in_poly(p1_x, p1_y, poly_zones[1])) { zone_counts[1]++; id(last_zone_hold) = 2; }
+                if (point_in_poly(p1_x, p1_y, poly_zones[2])) { zone_counts[2]++; id(last_zone_hold) = 3; }
+                if (point_in_poly(p1_x, p1_y, poly_zones[3])) { zone_counts[3]++; id(last_zone_hold) = 4; }
               }
               if (update_entities) {
                 switch (id(extra_entities)) {
@@ -1044,11 +918,10 @@ uart:
                     id(ld2450_target1_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(ld2450_target1_x).state != p1_x) {
+                    if (id(ld2450_target1_x).state != p1_x || id(ld2450_target1_y).state != p1_y) {
                       id(ld2450_target1_x).publish_state(p1_x);
-                    }
-                    if (id(ld2450_target1_y).state != p1_y) {
                       id(ld2450_target1_y).publish_state(p1_y);
+                      id(target1_last_update) = now;
                     }
                 }
               }
@@ -1059,7 +932,7 @@ uart:
             switch (id(extra_entities)) {
               case 5:
                 if (id(ld2450_target1_speed).state != 0) {
-                  id(ld2450_target1_speed).publish_state(0);
+                id(ld2450_target1_speed).publish_state(0);
                 }
                 if (id(ld2450_target1_resolution).state != 0) {
                   id(ld2450_target1_resolution).publish_state(0);
@@ -1075,10 +948,8 @@ uart:
                 id(ld2450_target1_active).publish_state(false);
               case 2:
               case 1:
-                if (id(ld2450_target1_x).state != 0) {
+                if (id(ld2450_target1_x).state != 0 || id(ld2450_target1_y).state != 0) {
                   id(ld2450_target1_x).publish_state(0);
-                }
-                if (id(ld2450_target1_y).state != 0) {
                   id(ld2450_target1_y).publish_state(0);
                 }
             }
@@ -1113,33 +984,19 @@ uart:
                 p2_x = p2_distance * cos(angle);
                 p2_y = p2_distance * sin(angle);
               }
-              if ((occupancy_mask_1_begin_x_value <= p2_x && p2_x <= occupancy_mask_1_end_x_value) &&
-                  (occupancy_mask_1_begin_y_value <= p2_y && p2_y <= occupancy_mask_1_end_y_value)) {
-                occupancy_mask_1_count++;
+              if (point_in_poly(p2_x, p2_y, poly_exclusions[0])) {
+                zone_exclusion_counts[0]++;
                 p2_detected = false;
                 target_masked = true;
-              } else if ((occupancy_mask_2_begin_x_value <= p2_x && p2_x <= occupancy_mask_2_end_x_value) &&
-                  (occupancy_mask_2_begin_y_value <= p2_y && p2_y <= occupancy_mask_2_end_y_value)) {
-                occupancy_mask_2_count++;
+              } else if (point_in_poly(p2_x, p2_y, poly_exclusions[1])) {
+                zone_exclusion_counts[1]++;
                 p2_detected = false;
                 target_masked = true;
               } else {
-                if ((zone1_begin_x_value <= p2_x && p2_x <= zone1_end_x_value) &&
-                    (zone1_begin_y_value <= p2_y && p2_y <= zone1_end_y_value)) {
-                  zone1_count++;
-                }
-                if ((zone2_begin_x_value <= p2_x && p2_x <= zone2_end_x_value) &&
-                    (zone2_begin_y_value <= p2_y && p2_y <= zone2_end_y_value)) {
-                  zone2_count++;
-                }
-                if ((zone3_begin_x_value <= p2_x && p2_x <= zone3_end_x_value) &&
-                    (zone3_begin_y_value <= p2_y && p2_y <= zone3_end_y_value)) {
-                  zone3_count++;
-                }
-                if ((zone4_begin_x_value <= p2_x && p2_x <= zone4_end_x_value) &&
-                    (zone4_begin_y_value <= p2_y && p2_y <= zone4_end_y_value)) {
-                  zone4_count++;
-                }
+                if (point_in_poly(p2_x, p2_y, poly_zones[0])) { zone_counts[0]++; id(last_zone_hold) = 1; }
+                if (point_in_poly(p2_x, p2_y, poly_zones[1])) { zone_counts[1]++; id(last_zone_hold) = 2; }
+                if (point_in_poly(p2_x, p2_y, poly_zones[2])) { zone_counts[2]++; id(last_zone_hold) = 3; }
+                if (point_in_poly(p2_x, p2_y, poly_zones[3])) { zone_counts[3]++; id(last_zone_hold) = 4; }
               }
               if (update_entities) {
                 switch (id(extra_entities)) {
@@ -1171,10 +1028,8 @@ uart:
                     id(ld2450_target2_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(ld2450_target2_x).state != p2_x) {
+                    if (id(ld2450_target2_x).state != p2_x || id(ld2450_target2_y).state != p2_y) {
                       id(ld2450_target2_x).publish_state(p2_x);
-                    }
-                    if (id(ld2450_target2_y).state != p2_y) {
                       id(ld2450_target2_y).publish_state(p2_y);
                     }
                 }
@@ -1202,10 +1057,8 @@ uart:
                 id(ld2450_target2_active).publish_state(false);
               case 2:
               case 1:
-                if (id(ld2450_target2_x).state != 0) {
+                if (id(ld2450_target2_x).state != 0 || id(ld2450_target2_y).state != 0) {
                   id(ld2450_target2_x).publish_state(0);
-                }
-                if (id(ld2450_target2_y).state != 0) {
                   id(ld2450_target2_y).publish_state(0);
                 }
             }
@@ -1240,34 +1093,21 @@ uart:
                 p3_x = p3_distance * cos(angle);
                 p3_y = p3_distance * sin(angle);
               }
-              if ((occupancy_mask_1_begin_x_value <= p3_x && p3_x <= occupancy_mask_1_end_x_value) &&
-                  (occupancy_mask_1_begin_y_value <= p3_y && p3_y <= occupancy_mask_1_end_y_value)) {
-                occupancy_mask_1_count++;
+              if (point_in_poly(p3_x, p3_y, poly_exclusions[0])) {
+                zone_exclusion_counts[0]++;
                 p3_detected = false;
                 target_masked = true;
-              } else if ((occupancy_mask_2_begin_x_value <= p3_x && p3_x <= occupancy_mask_2_end_x_value) &&
-                  (occupancy_mask_2_begin_y_value <= p3_y && p3_y <= occupancy_mask_2_end_y_value)) {
-                occupancy_mask_2_count++;
+              } else if (point_in_poly(p3_x, p3_y, poly_exclusions[1])) {
+                zone_exclusion_counts[1]++;
                 p3_detected = false;
                 target_masked = true;
               } else {
-                if ((zone1_begin_x_value <= p3_x && p3_x <= zone1_end_x_value) &&
-                    (zone1_begin_y_value <= p3_y && p3_y <= zone1_end_y_value)) {
-                  zone1_count++;
-                }
-                if ((zone2_begin_x_value <= p3_x && p3_x <= zone2_end_x_value) &&
-                    (zone2_begin_y_value <= p3_y && p3_y <= zone2_end_y_value)) {
-                  zone2_count++;
-                }
-                if ((zone3_begin_x_value <= p3_x && p3_x <= zone3_end_x_value) &&
-                    (zone3_begin_y_value <= p3_y && p3_y <= zone3_end_y_value)) {
-                  zone3_count++;
-                }
-                if ((zone4_begin_x_value <= p3_x && p3_x <= zone4_end_x_value) &&
-                    (zone4_begin_y_value <= p3_y && p3_y <= zone4_end_y_value)) {
-                  zone4_count++;
-                }
+                if (point_in_poly(p3_x, p3_y, poly_zones[0])) { zone_counts[0]++; id(last_zone_hold) = 1; }
+                if (point_in_poly(p3_x, p3_y, poly_zones[1])) { zone_counts[1]++; id(last_zone_hold) = 2; }
+                if (point_in_poly(p3_x, p3_y, poly_zones[2])) { zone_counts[2]++; id(last_zone_hold) = 3; }
+                if (point_in_poly(p3_x, p3_y, poly_zones[3])) { zone_counts[3]++; id(last_zone_hold) = 4; }
               }
+              
               if (update_entities) {
                 switch (id(extra_entities)) {
                   case 5:
@@ -1298,10 +1138,8 @@ uart:
                     id(ld2450_target3_active).publish_state(true);
                   case 2:
                   case 1:
-                    if (id(ld2450_target3_x).state != p3_x) {
+                    if (id(ld2450_target3_x).state != p3_x || id(ld2450_target3_y).state != p3_y) {
                       id(ld2450_target3_x).publish_state(p3_x);
-                    }
-                    if (id(ld2450_target3_y).state != p3_y) {
                       id(ld2450_target3_y).publish_state(p3_y);
                     }
                 }
@@ -1329,38 +1167,42 @@ uart:
                 id(ld2450_target3_active).publish_state(false);
               case 2:
               case 1:
-                if (id(ld2450_target3_x).state != 0) {
+                if (id(ld2450_target3_x).state != 0 || id(ld2450_target3_y).state != 0) {
                   id(ld2450_target3_x).publish_state(0);
-                }
-                if (id(ld2450_target3_y).state != 0) {
                   id(ld2450_target3_y).publish_state(0);
                 }
             }
           }
 
           if (update_entities && id(extra_entities) >= 2) {
-            if (id(ld2450_zone1_target_count).state != zone1_count) {
-              id(ld2450_zone1_target_count).publish_state(zone1_count);
+            if (id(ld2450_zone1_target_count).state != zone_counts[0]) {
+              id(ld2450_zone1_target_count).publish_state(zone_counts[0]);
             }
-            if (id(ld2450_zone2_target_count).state != zone2_count) {
-              id(ld2450_zone2_target_count).publish_state(zone2_count);
+            if (id(ld2450_zone2_target_count).state != zone_counts[1]) {
+              id(ld2450_zone2_target_count).publish_state(zone_counts[1]);
             }
-            if (id(ld2450_zone3_target_count).state != zone3_count) {
-              id(ld2450_zone3_target_count).publish_state(zone3_count);
+            if (id(ld2450_zone3_target_count).state != zone_counts[2]) {
+              id(ld2450_zone3_target_count).publish_state(zone_counts[2]);
             }
-            if (id(ld2450_zone4_target_count).state != zone4_count) {
-              id(ld2450_zone4_target_count).publish_state(zone4_count);
+            if (id(ld2450_zone4_target_count).state != zone_counts[3]) {
+              id(ld2450_zone4_target_count).publish_state(zone_counts[3]);
             }
-            if (id(ld2450_mask1_target_count).state != occupancy_mask_1_count) {
-              id(ld2450_mask1_target_count).publish_state(occupancy_mask_1_count);
+            if (id(ld2450_mask1_target_count).state != zone_exclusion_counts[0]) {
+              id(ld2450_mask1_target_count).publish_state(zone_exclusion_counts[0]);
             }
-            if (id(ld2450_mask2_target_count).state != occupancy_mask_2_count) {
-              id(ld2450_mask2_target_count).publish_state(occupancy_mask_2_count);
+            if (id(ld2450_mask2_target_count).state != zone_exclusion_counts[1]) {
+              id(ld2450_mask2_target_count).publish_state(zone_exclusion_counts[1]);
             }
           }
 
-          id(ld2450_occupancy).publish_state(p1_detected || p2_detected || p3_detected);
-          id(ld2450_zone1_occupancy).publish_state(zone1_count > 0);
-          id(ld2450_zone2_occupancy).publish_state(zone2_count > 0);
-          id(ld2450_zone3_occupancy).publish_state(zone3_count > 0);
-          id(ld2450_zone4_occupancy).publish_state(zone4_count > 0);
+          if(id(last_zone_hold) != 0 && (!id(ld2450_assumed_presence).state || id(dfrobot_presence).state == false)) {
+            id(last_zone_hold) = 0;
+          }
+          bool any_detected = p1_detected || p2_detected || p3_detected;
+          id(assumed_present).publish_state(!any_detected && id(last_zone_hold) != 0);
+          id(ld2450_occupancy).publish_state(any_detected || id(last_zone_hold) != 0);
+
+          id(ld2450_zone1_occupancy).publish_state(zone_counts[0] > 0 || id(last_zone_hold) == 1);
+          id(ld2450_zone2_occupancy).publish_state(zone_counts[1] > 0 || id(last_zone_hold) == 2);
+          id(ld2450_zone3_occupancy).publish_state(zone_counts[2] > 0 || id(last_zone_hold) == 3);
+          id(ld2450_zone4_occupancy).publish_state(zone_counts[3] > 0 || id(last_zone_hold) == 4);

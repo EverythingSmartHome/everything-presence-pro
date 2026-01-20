@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-01-18T21:38:41.771Z",
+  "generatedAt": "2026-01-20T12:17:54.075Z",
   "product": {
     "id": "everything-presence-pro",
     "displayName": "Everything Presence Pro",
@@ -10,7 +10,7 @@
     {
       "version": "1.1.4",
       "channel": "stable",
-      "releaseDate": "2026-01-18",
+      "releaseDate": "2026-01-20",
       "releaseNotes": "",
       "minPreviousVersion": "1.0.0",
       "variants": [

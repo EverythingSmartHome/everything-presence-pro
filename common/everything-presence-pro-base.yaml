@@ -63,7 +63,7 @@ api:
       - lambda: 'id(init_in_progress) = false; id(api_connected_flag) = true;'
       - if:
           condition:
-            lambda: 'return id(led_mode_select).state != "Manual Control";'
+            lambda: 'return id(led_mode_select).current_option() != "Manual Control";'
           then:
             # Stop any effects first
             - light.turn_on:
@@ -171,10 +171,10 @@ binary_sensor:
     on_state:
       then:
         - lambda: |-
-            auto mode = id(system_alarm_mode).state;
+            auto mode = id(system_alarm_mode).current_option();
             if (mode == "Motion Only" || mode == "Motion or Presence") {
               bool activate = id(pir_motion).state;
-              bool desired = (id(relay_contact_mode).state == "Normally Open (NO)") ? activate : !activate;
+              bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
               if (desired) {
                 id(system_alarm_relay).turn_on();
               } else {
@@ -201,10 +201,10 @@ binary_sensor:
     on_state:
       then:
         - lambda: |-
-            auto mode = id(system_alarm_mode).state;
+            auto mode = id(system_alarm_mode).current_option();
             if (mode == "Presence Only" || mode == "Motion or Presence") {
               bool activate = id(occupancy).state;
-              bool desired = (id(relay_contact_mode).state == "Normally Open (NO)") ? activate : !activate;
+              bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
               if (desired) {
                 id(system_alarm_relay).turn_on();
               } else {
@@ -213,7 +213,7 @@ binary_sensor:
             }
         - if:
             condition:
-              lambda: 'return id(led_mode_select).state == "Presence" || id(led_mode_select).state == "Environmental + Presence";'
+              lambda: 'return id(led_mode_select).current_option() == "Presence" || id(led_mode_select).current_option() == "Environmental + Presence";'
             then:
               - script.execute: control_leds
 
@@ -403,7 +403,7 @@ script:
     mode: restart
     then:
       - lambda: |-
-          auto mode = id(system_alarm_mode).state;
+          auto mode = id(system_alarm_mode).current_option();
           bool activate = false;
 
           if (mode == "Motion Only") {
@@ -414,7 +414,7 @@ script:
             activate = id(pir_motion).state || id(occupancy).state;
           }
 
-          bool desired = (id(relay_contact_mode).state == "Normally Open (NO)") ? activate : !activate;
+          bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
 
           if (desired) {
             id(system_alarm_relay).turn_on();
@@ -427,7 +427,7 @@ script:
     then:
       - lambda: |
           ESP_LOGD("control_leds", "Called - init_in_progress: %d, api_connected: %d, led_mode: %s",
-                   id(init_in_progress), id(api_connected_flag), id(led_mode_select).state.c_str());
+                   id(init_in_progress), id(api_connected_flag), id(led_mode_select).current_option());
 
           // Initialization/connection phase
           if (id(init_in_progress)) {
@@ -440,22 +440,22 @@ script:
             id(control_leds_connecting).execute();
           }
           // Manual control mode
-          else if (id(led_mode_select).state == "Manual Control") {
+          else if (id(led_mode_select).current_option() == "Manual Control") {
             ESP_LOGD("control_leds", "Executing control_leds_manual");
             id(control_leds_manual).execute();
           }
           // Environmental mode
-          else if (id(led_mode_select).state == "Environmental") {
+          else if (id(led_mode_select).current_option() == "Environmental") {
             ESP_LOGD("control_leds", "Executing control_leds_environmental");
             id(control_leds_environmental).execute();
           }
           // Presence mode
-          else if (id(led_mode_select).state == "Presence") {
+          else if (id(led_mode_select).current_option() == "Presence") {
             ESP_LOGD("control_leds", "Executing control_leds_presence");
             id(control_leds_presence).execute();
           }
           // Environmental + Presence combined mode
-          else if (id(led_mode_select).state == "Environmental + Presence") {
+          else if (id(led_mode_select).current_option() == "Environmental + Presence") {
             ESP_LOGD("control_leds", "Executing control_leds_environmental_presence");
             id(control_leds_environmental_presence).execute();
           }
@@ -640,21 +640,21 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(led_mode_select).state == "Manual Control";'
+            lambda: 'return id(led_mode_select).current_option() == "Manual Control";'
           then:
             - logger.log: "Setting LED to Manual Control mode"
             - script.execute: led_fade_out
 
       - if:
           condition:
-            lambda: 'return id(led_mode_select).state == "Environmental";'
+            lambda: 'return id(led_mode_select).current_option() == "Environmental";'
           then:
             - logger.log: "Setting LED to Environmental mode"
             - script.execute: update_environmental_led
 
       - if:
           condition:
-            lambda: 'return id(led_mode_select).state == "Presence";'
+            lambda: 'return id(led_mode_select).current_option() == "Presence";'
           then:
             - logger.log: "Setting LED to Presence mode"
             # Check current occupancy and set appropriate state
@@ -715,7 +715,7 @@ number:
         # Refresh LED state when brightness changes
         - if:
             condition:
-              lambda: 'return id(led_mode_select).state != "Manual Control" && id(api_connected_flag);'
+              lambda: 'return id(led_mode_select).current_option() != "Manual Control" && id(api_connected_flag);'
             then:
               - script.execute: control_leds
 
@@ -813,16 +813,16 @@ button:
           std::string base_url = "https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-";
 
           // Add network type (required, lowercase)
-          std::string network = id(firmware_network).state;
+          std::string network = id(firmware_network).current_option();
           std::transform(network.begin(), network.end(), network.begin(), ::tolower);
           base_url += network;
 
           // Add features in alphabetical order (ble before co2)
-          if (id(firmware_ble).state == "Enabled") {
+          if (id(firmware_ble).current_option() == "Enabled") {
             base_url += "-ble";
           }
 
-          if (id(firmware_co2).state == "Enabled") {
+          if (id(firmware_co2).current_option() == "Enabled") {
             base_url += "-co2";
           }
 
@@ -841,16 +841,16 @@ button:
           std::string base_url = "http://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-";
 
           // Add network type (required, lowercase)
-          std::string network = id(firmware_network).state;
+          std::string network = id(firmware_network).current_option();
           std::transform(network.begin(), network.end(), network.begin(), ::tolower);
           base_url += network;
 
           // Add features in alphabetical order (ble before co2)
-          if (id(firmware_ble).state == "Enabled") {
+          if (id(firmware_ble).current_option() == "Enabled") {
             base_url += "-ble";
           }
 
-          if (id(firmware_co2).state == "Enabled") {
+          if (id(firmware_co2).current_option() == "Enabled") {
             base_url += "-co2";
           }
 
