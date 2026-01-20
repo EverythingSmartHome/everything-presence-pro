@@ -17,12 +17,6 @@ esphome:
             white: 0%
             effect: "Network Connecting"
 
-globals:
-  - id: init_in_progress
-    type: bool
-    restore_value: no
-    initial_value: 'true'
-
 # Enable logging
 logger:
 
@@ -56,8 +50,6 @@ api:
 
   on_client_connected:
     then:
-      - lambda: |
-          id(init_in_progress) = false;
       - if:
           condition:
             lambda: 'return id(led_mode_select).current_option() != "Manual Control";'
@@ -422,16 +414,11 @@ script:
     mode: restart
     then:
       - lambda: |
-          ESP_LOGD("control_leds", "Called - init_in_progress: %d, api_connected (subscribed): %d, led_mode: %s",
-                   id(init_in_progress), id(api_id).is_connected(true), id(led_mode_select).current_option());
+          ESP_LOGD("control_leds", "Called - api_connected (subscribed): %d, led_mode: %s",
+                   id(api_id).is_connected(true), id(led_mode_select).current_option());
 
-          // Initialization/connection phase
-          if (id(init_in_progress)) {
-            ESP_LOGD("control_leds", "Executing control_leds_connecting (init)");
-            id(control_leds_connecting).execute();
-          }
           // No API connection
-          else if (!id(api_id).is_connected(true)) {
+          if (!id(api_id).is_connected(true)) {
             ESP_LOGD("control_leds", "Executing control_leds_connecting (no API)");
             id(control_leds_connecting).execute();
           }
