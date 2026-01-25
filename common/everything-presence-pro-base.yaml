@@ -138,6 +138,9 @@ sensor:
     update_interval: 2s
     filters:
       - lambda: "return x + id(env_illuminance_offset).state;"
+      - or:
+          - throttle: 30s
+          - delta: 2
       - clamp:
           min_value: 0
 
