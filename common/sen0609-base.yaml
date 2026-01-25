@@ -1,3 +1,8 @@
+globals:
+  - id: dfrobot_factory_resetting
+    type: bool
+    initial_value: 'false'
+
 binary_sensor:
   - platform: gpio
     name: Static Presence
@@ -15,14 +20,14 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "sensorStart"
+          data: "sensorStart\r\n"
       - delay: 1s
     turn_off_action:
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "sensorStop"
+          data: "sensorStop\r\n"
       - delay: 1s
 
   - platform: template
@@ -34,25 +39,25 @@ switch:
     turn_on_action:
       - switch.turn_off: dfrobot_sensor
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "setUartOutput 1 1"
+          data: "setUartOutput 1 1\r\n"
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "saveConfig"
+          data: "saveConfig\r\n"
       - delay: 3s
       - switch.turn_on: dfrobot_sensor
     turn_off_action:
       - switch.turn_off: dfrobot_sensor
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "setUartOutput 1 0"
+          data: "setUartOutput 1 0\r\n"
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "saveConfig"
+          data: "saveConfig\r\n"
       - delay: 3s
       - switch.turn_on: dfrobot_sensor
 
@@ -66,25 +71,25 @@ switch:
     turn_on_action:
       - switch.turn_off: dfrobot_sensor
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "setUartOutput 2 1 1 1"
+          data: "setUartOutput 2 1 1 1\r\n"
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "saveConfig"
+          data: "saveConfig\r\n"
       - delay: 3s
       - switch.turn_on: dfrobot_sensor
     turn_off_action:
       - switch.turn_off: dfrobot_sensor
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "setUartOutput 2 0"
+          data: "setUartOutput 2 0\r\n"
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "saveConfig"
+          data: "saveConfig\r\n"
       - delay: 3s
       - switch.turn_on: dfrobot_sensor
 
@@ -94,9 +99,9 @@ number:
     name: Static Presence Min Range
     icon: mdi:arrow-left-right
     entity_category: config
-    min_value: 0
+    min_value: 0.6
     max_value: 25
-    initial_value: 0
+    initial_value: 0.6
     optimistic: true
     step: 0.1
     restore_value: true
@@ -108,9 +113,9 @@ number:
     name: Static Presence Max Range
     icon: mdi:arrow-left-right
     entity_category: config
-    min_value: 0
+    min_value: 0.6
     max_value: 25
-    initial_value: 12
+    initial_value: 6
     optimistic: true
     step: 0.1
     restore_value: true
@@ -131,26 +136,30 @@ number:
     unit_of_measurement: m
     mode: slider
     set_action:
-      - switch.turn_off: dfrobot_sensor
-      - delay: 1s
-      - uart.write: 
-          id: uart_bus_dfrobot
-          data: !lambda |-
-            std::string mss = "setTrigRange " + to_string(x);
-            return std::vector<unsigned char>(mss.begin(), mss.end());
-      - delay: 1s
-      - uart.write:
-          id: uart_bus_dfrobot
-          data: "saveConfig"
-      - delay: 1s
-      - switch.turn_on: dfrobot_sensor
+      - if:
+          condition:
+            lambda: 'return !id(dfrobot_factory_resetting);'
+          then:
+            - switch.turn_off: dfrobot_sensor
+            - delay: 1s
+            - uart.write:
+                id: uart_bus_dfrobot
+                data: !lambda |-
+                  auto ms = str_sprintf("setTrigRange %.1f\r\n", x);
+                  return std::vector<unsigned char>(ms.begin(), ms.end());
+            - delay: 1s
+            - uart.write:
+                id: uart_bus_dfrobot
+                data: "saveConfig\r\n"
+            - delay: 1s
+            - switch.turn_on: dfrobot_sensor
 
   - platform: template
     name: Static Presence Timeout
     icon: mdi:clock-end
     entity_category: config
     id: dfrobot_off_delay
-    min_value: 1
+    min_value: 10
     max_value: 600
     initial_value: 15
     optimistic: true
@@ -159,19 +168,23 @@ number:
     unit_of_measurement: seconds
     mode: slider
     set_action:
-      - switch.turn_off: dfrobot_sensor
-      - delay: 1s
-      - uart.write: 
-          id: uart_bus_dfrobot
-          data: !lambda |-
-            std::string mss = "setLatency " + to_string(id(dfrobot_on_delay).state) + " " + to_string(id(dfrobot_off_delay).state);
-            return std::vector<unsigned char>(mss.begin(), mss.end());
-      - delay: 1s
-      - uart.write:
-          id: uart_bus_dfrobot
-          data: "saveConfig"
-      - delay: 1s
-      - switch.turn_on: dfrobot_sensor
+      - if:
+          condition:
+            lambda: 'return !id(dfrobot_factory_resetting);'
+          then:
+            - switch.turn_off: dfrobot_sensor
+            - delay: 1s
+            - uart.write:
+                id: uart_bus_dfrobot
+                data: !lambda |-
+                  auto ms = str_sprintf("setLatency %.2f %.0f\r\n", id(dfrobot_on_delay).state, id(dfrobot_off_delay).state);
+                  return std::vector<unsigned char>(ms.begin(), ms.end());
+            - delay: 1s
+            - uart.write:
+                id: uart_bus_dfrobot
+                data: "saveConfig\r\n"
+            - delay: 1s
+            - switch.turn_on: dfrobot_sensor
 
   - platform: template
     name: Static Presence On Delay
@@ -187,19 +200,23 @@ number:
     unit_of_measurement: seconds
     mode: slider
     set_action:
-      - switch.turn_off: dfrobot_sensor
-      - delay: 1s
-      - uart.write:   
-          id: uart_bus_dfrobot
-          data: !lambda |-
-            std::string mss = "setLatency " + to_string(id(dfrobot_on_delay).state) + " " + to_string(id(dfrobot_off_delay).state);
-            return std::vector<unsigned char>(mss.begin(), mss.end());
-      - delay: 1s
-      - uart.write: 
-          id: uart_bus_dfrobot
-          data: "saveConfig"
-      - delay: 1s
-      - switch.turn_on: dfrobot_sensor
+      - if:
+          condition:
+            lambda: 'return !id(dfrobot_factory_resetting);'
+          then:
+            - switch.turn_off: dfrobot_sensor
+            - delay: 1s
+            - uart.write:
+                id: uart_bus_dfrobot
+                data: !lambda |-
+                  auto ms = str_sprintf("setLatency %.2f %.0f\r\n", id(dfrobot_on_delay).state, id(dfrobot_off_delay).state);
+                  return std::vector<unsigned char>(ms.begin(), ms.end());
+            - delay: 1s
+            - uart.write:
+                id: uart_bus_dfrobot
+                data: "saveConfig\r\n"
+            - delay: 1s
+            - switch.turn_on: dfrobot_sensor
 
   - platform: template
     name: Static Presence Sustain Sensitivity
@@ -233,15 +250,15 @@ button:
     on_press:
       - switch.turn_off: dfrobot_sensor
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: !lambda
-            std::string ms = "setRange " + to_string(id(dfrobot_min_distance).state) + " " + to_string(id(dfrobot_max_distance).state);
+          data: !lambda |-
+            auto ms = str_sprintf("setRange %.1f %.1f\r\n", id(dfrobot_min_distance).state, id(dfrobot_max_distance).state);
             return std::vector<unsigned char>(ms.begin(), ms.end());
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "saveConfig"
+          data: "saveConfig\r\n"
       - delay: 1s
       - switch.turn_on: dfrobot_sensor
  
@@ -254,13 +271,13 @@ button:
       - delay: 1s
       - uart.write:
           id: uart_bus_dfrobot
-          data: 
-            !lambda std::string mss = "setSensitivity " + to_string(id(dfrobot_sustain_sensitivity).state) + " " + to_string(id(dfrobot_trigger_sensitivity).state);
-            return std::vector<unsigned char>(mss.begin(), mss.end());
+          data: !lambda |-
+            auto ms = str_sprintf("setSensitivity %d %d\r\n", (int)id(dfrobot_sustain_sensitivity).state, (int)id(dfrobot_trigger_sensitivity).state);
+            return std::vector<unsigned char>(ms.begin(), ms.end());
       - delay: 1s
       - uart.write:
           id: uart_bus_dfrobot
-          data: "saveConfig"
+          data: "saveConfig\r\n"
       - delay: 1s
       - switch.turn_on: dfrobot_sensor
 
@@ -272,7 +289,7 @@ button:
     on_press:
       - uart.write:
           id: uart_bus_dfrobot
-          data: "resetSystem"
+          data: "resetSystem\r\n"
 
   - platform: template
     name: Factory Reset Static Presence Sensor
@@ -283,10 +300,40 @@ button:
     on_press:
       - switch.turn_off: dfrobot_sensor
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "resetCfg"
+          data: "resetCfg\r\n"
       - delay: 3s
+      # Set flag to prevent set_actions from sending commands during reset
+      - globals.set:
+          id: dfrobot_factory_resetting
+          value: 'true'
+      # Reset all entity values to factory defaults
+      - number.set:
+          id: dfrobot_min_distance
+          value: 0.6
+      - number.set:
+          id: dfrobot_max_distance
+          value: 6
+      - number.set:
+          id: dfrobot_trigger_distance
+          value: 6
+      - number.set:
+          id: dfrobot_sustain_sensitivity
+          value: 7
+      - number.set:
+          id: dfrobot_trigger_sensitivity
+          value: 5
+      - number.set:
+          id: dfrobot_on_delay
+          value: 0
+      - number.set:
+          id: dfrobot_off_delay
+          value: 15
+      # Clear the flag
+      - globals.set:
+          id: dfrobot_factory_resetting
+          value: 'false'
       - switch.turn_on: dfrobot_sensor
 
 light:
@@ -308,17 +355,17 @@ output:
           condition:
             lambda: !lambda return state;
           then:
-            - uart.write: 
+            - uart.write:
                 id: uart_bus_dfrobot
-                data: "setLedMode 1 0"
+                data: "setLedMode 1 0\r\n"
           else:
-            - uart.write: 
+            - uart.write:
                 id: uart_bus_dfrobot
-                data: "setLedMode 1 1"
+                data: "setLedMode 1 1\r\n"
       - delay: 1s
-      - uart.write: 
+      - uart.write:
           id: uart_bus_dfrobot
-          data: "saveConfig"
+          data: "saveConfig\r\n"
       - delay: 3s
       - switch.turn_on: dfrobot_sensor
 
