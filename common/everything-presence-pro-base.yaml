@@ -8,7 +8,6 @@ esphome:
         - delay: 200ms
         - script.execute: update_relay_state
         # Start loading animation and keep it until API connects
-        - lambda: 'id(api_connected_flag) = false;'
         - light.turn_on:
             id: led_rgb
             brightness: 30%
@@ -18,21 +17,12 @@ esphome:
             white: 0%
             effect: "Network Connecting"
 
-globals:
-  - id: api_connected_flag
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-  - id: init_in_progress
-    type: bool
-    restore_value: no
-    initial_value: 'true'
-
 # Enable logging
 logger:
 
 # Enable Home Assistant API
 api:
+  id: api_id
   actions:
     - action: set_update_manifest
       variables:
@@ -60,7 +50,6 @@ api:
 
   on_client_connected:
     then:
-      - lambda: 'id(init_in_progress) = false; id(api_connected_flag) = true;'
       - if:
           condition:
             lambda: 'return id(led_mode_select).current_option() != "Manual Control";'
@@ -111,7 +100,6 @@ api:
 
   on_client_disconnected:
     then:
-      - lambda: 'id(api_connected_flag) = false;'
       - script.execute: control_leds
 
 http_request:
@@ -426,16 +414,11 @@ script:
     mode: restart
     then:
       - lambda: |
-          ESP_LOGD("control_leds", "Called - init_in_progress: %d, api_connected: %d, led_mode: %s",
-                   id(init_in_progress), id(api_connected_flag), id(led_mode_select).current_option());
+          ESP_LOGD("control_leds", "Called - api_connected (subscribed): %d, led_mode: %s",
+                   id(api_id).is_connected(true), id(led_mode_select).current_option());
 
-          // Initialization/connection phase
-          if (id(init_in_progress)) {
-            ESP_LOGD("control_leds", "Executing control_leds_connecting (init)");
-            id(control_leds_connecting).execute();
-          }
           // No API connection
-          else if (!id(api_connected_flag)) {
+          if (!id(api_id).is_connected(true)) {
             ESP_LOGD("control_leds", "Executing control_leds_connecting (no API)");
             id(control_leds_connecting).execute();
           }
@@ -715,7 +698,7 @@ number:
         # Refresh LED state when brightness changes
         - if:
             condition:
-              lambda: 'return id(led_mode_select).current_option() != "Manual Control" && id(api_connected_flag);'
+              lambda: 'return id(led_mode_select).current_option() != "Manual Control" && id(api_id).is_connected(true);'
             then:
               - script.execute: control_leds
 
