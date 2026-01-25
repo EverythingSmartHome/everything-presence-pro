@@ -50,6 +50,12 @@ api:
 
   on_client_connected:
     then:
+      # Wait until client has subscribed
+      - wait_until:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          timeout: 3s
       - if:
           condition:
             lambda: 'return id(led_mode_select).current_option() != "Manual Control";'
@@ -95,9 +101,6 @@ api:
                 white: 0%
                 transition_length: 400ms
             - delay: 500ms
-          else:
-            # Give client time to subscribe before checking connection state
-            - delay: 200ms
       # Always restore to current mode, even if Manual Control
       - script.execute: control_leds
 
