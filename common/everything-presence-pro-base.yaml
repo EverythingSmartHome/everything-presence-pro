@@ -95,6 +95,9 @@ api:
                 white: 0%
                 transition_length: 400ms
             - delay: 500ms
+          else:
+            # Give client time to subscribe before checking connection state
+            - delay: 200ms
       # Always restore to current mode, even if Manual Control
       - script.execute: control_leds
 
@@ -418,7 +421,7 @@ script:
     then:
       - lambda: |
           ESP_LOGD("control_leds", "Called - api_connected (subscribed): %d, led_mode: %s",
-                   id(api_id).is_connected(true), id(led_mode_select).current_option());
+                   id(api_id).is_connected(true), id(led_mode_select).current_option().c_str());
 
           // No API connection
           if (!id(api_id).is_connected(true)) {
