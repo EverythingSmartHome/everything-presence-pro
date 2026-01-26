@@ -1,6 +1,6 @@
 {
   "name": "Everything Presence Pro WiFi",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "home_assistant_domain": "esphome",
   "new_install_skip_erase": false,
   "builds": [
@@ -8,9 +8,7 @@
       "chipFamily": "ESP32",
       "ota": {
         "path": "everything-presence-pro-wifi/everything-presence-pro-esp32.ota.bin",
-        "md5": "256f968c79745d292a61a6966c7a73e0",
-        "summary": "Breaking change: Polygon zones only + automatic migration",
-        "release_url": "https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v1.1.4"
+        "md5": "6baa471220d39ea1043746f1d3939b9a"
       },
       "parts": [
         {
