@@ -116,9 +116,6 @@ ota:
   - platform: http_request
     id: ota_http_request
 
-debug:
-  update_interval: 5s
-
 sensor:
   - platform: shtcx
     id: "shtc3_sensor"
