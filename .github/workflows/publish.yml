@@ -154,3 +154,105 @@ jobs:
           clean: false
           single-commit: false
           commit-message: "Update firmware-index.json for v${{ steps.version.outputs.version }}"
+
+  add-release-notes:
+    name: Add Release Notes to Manifests
+    runs-on: ubuntu-latest
+    needs:
+      - generate-firmware-index
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get version from firmware index
+        id: version
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('firmware-index.json', 'utf8'));
+          const version = data?.product?.latestVersion || data?.firmwares?.[0]?.version || '';
+          if (!version) {
+            throw new Error('Could not determine version from firmware-index.json');
+          }
+          console.log(`Detected version: ${version}`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          NODE
+
+      - name: Patch manifests with release notes
+        env:
+          RELEASE_SUMMARY: "Breaking change: Polygon zones only + automatic migration"
+          RELEASE_URL: "https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v${{ steps.version.outputs.version }}"
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const root = process.cwd();
+          const summary = process.env.RELEASE_SUMMARY;
+          const releaseUrl = process.env.RELEASE_URL;
+
+          const isJson = (p) => p.endsWith('.json');
+          const walk = (dir) => {
+            const out = [];
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) out.push(...walk(full));
+              else if (entry.isFile() && isJson(full)) out.push(full);
+            }
+            return out;
+          };
+
+          const files = walk(root);
+          let updated = 0;
+
+          for (const file of files) {
+            let data;
+            try {
+              data = JSON.parse(fs.readFileSync(file, 'utf8'));
+            } catch {
+              continue;
+            }
+
+            let touched = false;
+            if (Array.isArray(data.builds)) {
+              data.builds = data.builds.map((build) => {
+                if (build && build.ota && typeof build.ota === 'object') {
+                  build.ota.summary = summary;
+                  build.ota.release_url = releaseUrl;
+                  touched = true;
+                }
+                return build;
+              });
+            }
+
+            if (data.ota && typeof data.ota === 'object') {
+              data.ota.summary = summary;
+              data.ota.release_url = releaseUrl;
+              touched = true;
+            }
+
+            if (touched) {
+              fs.writeFileSync(file, JSON.stringify(data, null, 2));
+              updated += 1;
+            }
+          }
+
+          console.log(`Updated ${updated} manifest files`);
+          NODE
+
+      - name: Deploy updated manifests to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: .
+          target-folder: /
+          clean: false
+          single-commit: false
+          commit-message: "Add release notes for v${{ steps.version.outputs.version }}"

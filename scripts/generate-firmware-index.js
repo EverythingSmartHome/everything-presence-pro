@@ -19,6 +19,8 @@ const path = require('path');
 const PRODUCT_ID = 'everything-presence-pro';
 const PRODUCT_DISPLAY_NAME = 'Everything Presence Pro';
 const SCHEMA_VERSION = '1.0';
+const RELEASE_SUMMARY = 'Breaking change: Polygon zones only + automatic migration';
+const RELEASE_URL_BASE = 'https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v';
 
 // Parse command line arguments
 function parseArgs() {
@@ -132,6 +134,7 @@ function findFirmwareFiles(dir) {
 function generateFirmwareIndex() {
   const args = parseArgs();
   const version = args.version || '0.0.0';
+  const releaseNotes = `${RELEASE_SUMMARY}. Details: ${RELEASE_URL_BASE}${version}`;
 
   console.log(`Generating firmware index for ${PRODUCT_ID} v${version}`);
 
@@ -196,7 +199,7 @@ function generateFirmwareIndex() {
         version: version,
         channel: 'stable',
         releaseDate: new Date().toISOString().split('T')[0],
-        releaseNotes: '',
+        releaseNotes,
         minPreviousVersion: '1.0.0',
         variants: variants.filter(v => v.requirements.firmware_channel === 'stable')
       }
@@ -220,7 +223,7 @@ function generateFirmwareIndex() {
       version: version,
       channel: 'beta',
       releaseDate: new Date().toISOString().split('T')[0],
-      releaseNotes: '',
+      releaseNotes,
       minPreviousVersion: '1.0.0',
       variants: betaVariants
     });
