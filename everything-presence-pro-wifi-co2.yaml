@@ -51,7 +51,6 @@ update:
     source: http://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-wifi-co2-manifest.json
 
 wifi:
-  use_address: 10.2.13.16
   on_connect:
     then:
       - script.execute: control_leds
