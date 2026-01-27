@@ -8,9 +8,7 @@
       "chipFamily": "ESP32",
       "ota": {
         "path": "everything-presence-pro-ethernet-ble-co2/everything-presence-pro-esp32.ota.bin",
-        "md5": "c39ec7eae361e6f01d832bd8fbd742eb",
-        "summary": "Breaking change: Polygon zones only + automatic migration",
-        "release_url": "https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v1.2.0"
+        "md5": "0e5344e771824112527fca73edf07877"
       },
       "parts": [
         {
