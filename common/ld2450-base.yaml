@@ -1199,6 +1199,12 @@ uart:
             id(last_zone_hold) = 0;
           }
           bool any_detected = p1_detected || p2_detected || p3_detected;
+          if (any_detected && id(last_zone_hold) != 0) {
+            int held_idx = id(last_zone_hold) - 1;
+            if (zone_counts[held_idx] == 0) {
+              id(last_zone_hold) = 0;
+            }
+          }
           id(assumed_present).publish_state(!any_detected && id(last_zone_hold) != 0);
           id(ld2450_occupancy).publish_state(any_detected || id(last_zone_hold) != 0);
 
