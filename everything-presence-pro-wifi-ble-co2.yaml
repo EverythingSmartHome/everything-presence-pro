@@ -24,7 +24,7 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
-    version: recommended
+    version: 5.5.1 # pinned due to esp-idf bt proxy issue in 5.5.2, see https://github.com/esphome/esphome/issues/13560
 
 packages:
    pro_base: !include common/everything-presence-pro-base.yaml
