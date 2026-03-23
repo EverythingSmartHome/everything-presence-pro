@@ -421,10 +421,10 @@ script:
     then:
       - lambda: |
           ESP_LOGD("control_leds", "Called - api_connected (subscribed): %d, led_mode: %s",
-                   id(api_id).is_connected(true), id(led_mode_select).current_option().c_str());
+                   id(api_id).is_connected_with_state_subscription(), id(led_mode_select).current_option().c_str());
 
           // No API connection
-          if (!id(api_id).is_connected(true)) {
+          if (!id(api_id).is_connected_with_state_subscription()) {
             ESP_LOGD("control_leds", "Executing control_leds_connecting (no API)");
             id(control_leds_connecting).execute();
           }
@@ -704,7 +704,7 @@ number:
         # Refresh LED state when brightness changes
         - if:
             condition:
-              lambda: 'return id(led_mode_select).current_option() != "Manual Control" && id(api_id).is_connected(true);'
+              lambda: 'return id(led_mode_select).current_option() != "Manual Control" && id(api_id).is_connected_with_state_subscription();'
             then:
               - script.execute: control_leds
 
