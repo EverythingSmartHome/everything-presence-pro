@@ -252,12 +252,27 @@ light:
           max_brightness: 70%
 
       # Presence detection effects - subtle, calming pulse
-      - pulse:
+      - lambda:
           name: "Presence Glow"
-          transition_length: 4s
           update_interval: 4s
-          min_brightness: 40%
-          max_brightness: 55%
+          lambda: |-
+            static constexpr float MIN_BRIGHTNESS = 0.40f;
+            static constexpr float MAX_BRIGHTNESS = 0.65f;
+
+            static bool rising = true;
+            static float brightness = MIN_BRIGHTNESS;
+
+            const float multiplier  = id(led_brightness_multiplier).state;
+
+            auto call = id(led_rgb).turn_on();
+            call.set_brightness(clamp(brightness * multiplier, 0.0f, 1.0f));
+            call.set_transition_length(4000);
+            call.set_publish(false);
+            call.set_save(false);
+            call.perform();
+
+            brightness += (MAX_BRIGHTNESS - MIN_BRIGHTNESS) * (rising ? 1 : -1);
+            rising = !rising;
       - pulse:
           name: "Presence Active"
           transition_length: 2.5s
