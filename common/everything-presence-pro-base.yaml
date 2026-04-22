@@ -8,14 +8,18 @@ esphome:
         - delay: 200ms
         - script.execute: update_relay_state
         # Start loading animation and keep it until API connects
-        - light.turn_on:
-            id: led_rgb
-            brightness: 30%
-            red: 0%
-            green: 60%
-            blue: 100%
-            white: 0%
-            effect: "Network Connecting"
+        - if:
+            condition:
+              lambda: 'return id(status_led_select).current_option() == "Enabled";'
+            then:
+              - light.turn_on:
+                  id: led_rgb
+                  brightness: 30%
+                  red: 0%
+                  green: 60%
+                  blue: 100%
+                  white: 0%
+                  effect: "Network Connecting"
 
 # Enable logging
 logger:
@@ -58,7 +62,7 @@ api:
           timeout: 3s
       - if:
           condition:
-            lambda: 'return id(led_mode_select).current_option() != "Manual Control";'
+            lambda: 'return id(status_led_select).current_option() == "Enabled" && id(led_mode_select).current_option() != "Manual Control";'
           then:
             # Stop any effects first
             - light.turn_on:
@@ -372,6 +376,18 @@ select:
         - script.execute: control_leds
 
   - platform: template
+    name: "Network Status LED"
+    id: status_led_select
+    entity_category: config
+    optimistic: true
+    options:
+      - "Enabled"
+      - "Disabled"
+    initial_option: "Enabled"
+    restore_value: true
+    icon: mdi:led-on
+
+  - platform: template
     id: firmware_network
     name: Network Type
     icon: "mdi:network"
@@ -467,18 +483,22 @@ script:
   # Connection state - blue pulsing
   - id: control_leds_connecting
     then:
-      - light.turn_on:
-          id: led_rgb
-          brightness: !lambda 'return 0.30 * id(led_brightness_multiplier).state;'
-          red: 0%
-          green: 60%
-          blue: 100%
-          white: 0%
-          transition_length: 500ms
-      - delay: 550ms
-      - light.turn_on:
-          id: led_rgb
-          effect: "Network Connecting"
+      - if:
+          condition:
+            lambda: 'return id(status_led_select).current_option() == "Enabled";'
+          then:
+            - light.turn_on:
+                id: led_rgb
+                brightness: !lambda 'return 0.30 * id(led_brightness_multiplier).state;'
+                red: 0%
+                green: 60%
+                blue: 100%
+                white: 0%
+                transition_length: 500ms
+            - delay: 550ms
+            - light.turn_on:
+                id: led_rgb
+                effect: "Network Connecting"
 
   # Manual control - turn off
   - id: control_leds_manual
