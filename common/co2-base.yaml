@@ -28,3 +28,159 @@ button:
       - scd4x.perform_forced_calibration:
           value: 419
           id: scd40
+
+script:
+  - id: !extend control_leds_environmental_presence
+    then:
+      - if:
+          condition:
+            lambda: 'return id(occupancy).state;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(co2).state < 800;'
+                then:
+                  - light.turn_on:
+                      id: led_rgb
+                      effect: none
+                  - delay: 50ms
+                  - light.turn_on:
+                      id: led_rgb
+                      brightness: !lambda 'return 0.55 * id(led_brightness_multiplier).state;'
+                      red: 80%
+                      green: 20%
+                      blue: 100%
+                      white: 0%
+                      transition_length: 600ms
+                  - delay: 650ms
+                  - light.turn_on:
+                      id: led_rgb
+                      effect: "Presence Glow"
+                else:
+                  - script.execute: alternate_presence_environmental
+          else:
+            - script.execute: update_environmental_led
+
+  - id: !extend alternate_presence_environmental
+    mode: restart
+    then:
+      - light.turn_on:
+          id: led_rgb
+          effect: none
+      - delay: 50ms
+      - light.turn_on:
+          id: led_rgb
+          brightness: !lambda 'return 0.55 * id(led_brightness_multiplier).state;'
+          red: 80%
+          green: 20%
+          blue: 100%
+          white: 0%
+          transition_length: 600ms
+      - delay: 650ms
+      - light.turn_on:
+          id: led_rgb
+          effect: "Presence Glow"
+      - delay: 3000ms
+      - if:
+          condition:
+            lambda: 'return id(co2).state >= 800 && id(co2).state < 1200;'
+          then:
+            - light.turn_on:
+                id: led_rgb
+                effect: none
+            - delay: 50ms
+            - light.turn_on:
+                id: led_rgb
+                brightness: !lambda 'return 0.45 * id(led_brightness_multiplier).state;'
+                red: 100%
+                green: 65%
+                blue: 0%
+                white: 0%
+                transition_length: 600ms
+            - delay: 650ms
+            - light.turn_on:
+                id: led_rgb
+                effect: "Environmental Warning"
+      - if:
+          condition:
+            lambda: 'return id(co2).state >= 1200;'
+          then:
+            - light.turn_on:
+                id: led_rgb
+                effect: none
+            - delay: 50ms
+            - light.turn_on:
+                id: led_rgb
+                brightness: !lambda 'return 0.55 * id(led_brightness_multiplier).state;'
+                red: 100%
+                green: 0%
+                blue: 0%
+                white: 0%
+                transition_length: 600ms
+            - delay: 650ms
+            - light.turn_on:
+                id: led_rgb
+                effect: "Environmental Alert"
+      - delay: 4000ms
+      - if:
+          condition:
+            lambda: 'return id(led_mode_select).current_option() == "Environmental + Presence" && id(occupancy).state && id(co2).state >= 800;'
+          then:
+            - script.execute: alternate_presence_environmental
+
+  - id: !extend update_environmental_led
+    then:
+      - if:
+          condition:
+            lambda: 'return id(co2).state >= 1200;'
+          then:
+            - light.turn_on:
+                id: led_rgb
+                effect: none
+            - delay: 50ms
+            - light.turn_on:
+                id: led_rgb
+                brightness: !lambda 'return 0.55 * id(led_brightness_multiplier).state;'
+                red: 100%
+                green: 0%
+                blue: 0%
+                white: 0%
+                transition_length: 600ms
+            - delay: 650ms
+            - light.turn_on:
+                id: led_rgb
+                effect: "Environmental Alert"
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(co2).state >= 800;'
+                then:
+                  - light.turn_on:
+                      id: led_rgb
+                      effect: none
+                  - delay: 50ms
+                  - light.turn_on:
+                      id: led_rgb
+                      brightness: !lambda 'return 0.45 * id(led_brightness_multiplier).state;'
+                      red: 100%
+                      green: 65%
+                      blue: 0%
+                      white: 0%
+                      transition_length: 600ms
+                  - delay: 650ms
+                  - light.turn_on:
+                      id: led_rgb
+                      effect: "Environmental Warning"
+                else:
+                  - light.turn_on:
+                      id: led_rgb
+                      effect: none
+                  - delay: 50ms
+                  - light.turn_on:
+                      id: led_rgb
+                      brightness: !lambda 'return 0.35 * id(led_brightness_multiplier).state;'
+                      red: 0%
+                      green: 100%
+                      blue: 0%
+                      white: 0%
+                      transition_length: 600ms
