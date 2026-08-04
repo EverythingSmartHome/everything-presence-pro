@@ -536,6 +536,7 @@ sensor:
 select:
   - platform: template
     name: 'Update speed'
+    id: ld2450_update_speed
     icon: 'mdi:speedometer'
     optimistic: true
     restore_value: true
@@ -552,6 +553,7 @@ select:
         - lambda: id(mmwave_update_interval) = (i + 1) * 100;
   - platform: template
     name: "Target Update Rate"
+    id: ld2450_target_update_rate
     icon: 'mdi:update'
     optimistic: true
     restore_value: true

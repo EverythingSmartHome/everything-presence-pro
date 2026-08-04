@@ -63,3 +63,5 @@ wifi:
 esp32_improv:
   authorizer: none
 
+improv_serial:
+
