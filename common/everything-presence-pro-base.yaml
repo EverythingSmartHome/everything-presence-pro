@@ -802,10 +802,12 @@ number:
 button:
   - platform: restart
     name: "Restart Device"
+    id: restart_device
     entity_category: config
 
   - platform: template
     name: "Apply Update"
+    id: apply_update
     entity_category: diagnostic
     on_press:
       - logger.log: "Applying firmware update based on selected configuration"
