@@ -339,6 +339,7 @@ button:
 light:
   - platform: binary
     name: Static Presence LED
+    id: dfrobot_static_presence_led
     restore_mode: RESTORE_DEFAULT_OFF
     output: dfrobot_led_output
     entity_category: config
