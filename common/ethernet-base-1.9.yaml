@@ -1,0 +1,25 @@
+# Everything Presence Pro - board revision 1.9 (PROTOTYPE)
+#
+# Difference vs 1.8 (common/ethernet-base.yaml):
+#   - The LAN8720A nRST line is now wired to GPIO0 (1.8 left the PHY reset
+#     tied to the board reset network, so no GPIO was needed).
+#   - RMII reference clock is unchanged: the ESP32 still generates the 50MHz
+#     clock and drives it out on GPIO17 (CLK_OUT).
+#
+# GPIO0 is an ESP32 strapping pin: it must read HIGH at the moment the chip
+# comes out of reset or the ROM enters UART download mode instead of booting
+# the app. ESP-IDF drives this pin LOW for ~100ms during PHY reset, so any
+# reset that lands inside that window will strap the chip into download mode.
+# `ignore_strapping_warning` is not offered by the ethernet component, so the
+# strapping warning below is expected and intentional.
+ethernet:
+  id: eth_component
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk:
+    pin: GPIO17
+    mode: CLK_OUT
+  # LAN8720A nRST - held low by ESP-IDF during PHY reset, high in normal run
+  power_pin: GPIO0
+  phy_addr: 0

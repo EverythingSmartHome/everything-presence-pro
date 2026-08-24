@@ -1,0 +1,90 @@
+# BOOT-MODE SOAK TEST HARNESS - PROTOTYPE VALIDATION ONLY, NEVER SHIP THIS.
+#
+# Reboots the device continuously at a randomised delay after boot so that
+# resets land at every possible point in the startup sequence: PHY reset,
+# ethernet bring-up and steady-state running. A board that strap-faults into UART
+# download mode will stop producing ESPHome logs and the ROM will print
+# "boot:0x3 (DOWNLOAD_BOOT...)" / "waiting for download" instead, which is
+# what scripts/boot-soak.py watches for.
+#
+# The restart is a raw arch_restart() (esp_restart with no component
+# teardown) on purpose: a graceful shutdown would deinit the ethernet driver
+# and release the PHY reset GPIO, which is exactly the failure mode we are
+# trying to provoke.
+#
+# Required substitutions (see test-boot-soak-*.yaml):
+#   soak_min_ms, soak_max_ms, soak_toggle_relay, soak_wdt_every
+
+debug:
+  update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Reset Reason"
+      id: soak_reset_reason
+
+globals:
+  - id: soak_boot_count
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'
+  - id: soak_delay_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+
+esphome:
+  on_boot:
+    # Earliest practical hook - prove the app actually started running
+    - priority: 800
+      then:
+        - lambda: |-
+            id(soak_boot_count) += 1;
+            ESP_LOGW("soak", "SOAK-BOOT n=%u", (unsigned) id(soak_boot_count));
+
+    # Latest hook - everything (including ethernet) has been set up by now
+    - priority: -100
+      then:
+        - lambda: |-
+            const uint32_t lo = ${soak_min_ms};
+            const uint32_t hi = ${soak_max_ms};
+            id(soak_delay_ms) = lo + (random_uint32() % (hi - lo + 1));
+            ESP_LOGW("soak", "SOAK-ARM n=%u delay=%ums",
+                     (unsigned) id(soak_boot_count), (unsigned) id(soak_delay_ms));
+        - if:
+            condition:
+              lambda: 'return ${soak_toggle_relay} && (id(soak_boot_count) % 2 == 1);'
+            then:
+              # GPIO12 is the ESP32 VDD_SDIO strapping pin. Driving the relay
+              # high on odd boots means half of all resets are sampled with
+              # GPIO12 high, which is its own distinct boot hazard.
+              - lambda: 'ESP_LOGW("soak", "SOAK-RELAY on (GPIO12 high across this reset)");'
+              - switch.turn_on: system_alarm_relay
+            else:
+              - switch.turn_off: system_alarm_relay
+        - delay: !lambda 'return id(soak_delay_ms);'
+        - lambda: |-
+            ESP_LOGW("soak", "SOAK-RESTART n=%u eth_connected=%d relay=%d",
+                     (unsigned) id(soak_boot_count),
+                     (int) id(eth_component).is_connected(),
+                     (int) id(system_alarm_relay).state);
+            global_preferences->sync();
+        - delay: 50ms
+        - if:
+            condition:
+              lambda: |-
+                return ${soak_wdt_every} > 0 &&
+                       (id(soak_boot_count) % ${soak_wdt_every} == 0);
+            then:
+              # Every Nth boot, die by watchdog instead of by esp_restart.
+              # Blocking the main loop starves the task watchdog, which resets
+              # the chip abruptly with no shutdown path at all - so whatever
+              # GPIO0 happens to be driving at that instant is still driving
+              # when the chip re-straps. This is the harshest reset a shipped
+              # unit can experience short of a brownout.
+              - lambda: 'ESP_LOGW("soak", "SOAK-WDT blocking loop to force a watchdog reset");'
+              - delay: 20ms
+              - lambda: 'while (true) { }'
+            else:
+              - lambda: 'arch_restart();'

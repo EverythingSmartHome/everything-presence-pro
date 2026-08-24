@@ -1,0 +1,75 @@
+# BOOT-MODE SOAK TEST - board revision 1.9a - TEST BUILD, DO NOT SHIP
+#
+# Identical to everything-presence-pro-ethernet-1.9a.yaml but with the
+# boot-soak harness layered on top: the device reboots itself continuously at
+# a randomised delay so resets land at every point in startup. Drive it with
+# scripts/boot-soak.py, which classifies each ROM boot message.
+#
+# Ethernet-only build for the 1.9a prototype. This board takes its 50MHz RMII
+# reference clock from an external oscillator on GPIO0 (clock in), and moves
+# the LAN8720A reset / power-enable to GPIO17.
+# See common/ethernet-base-1.9a.yaml for the pin map and the boot-mode caveat.
+#
+# This build uses its own device name so a prototype cannot collide with, or
+# be OTA'd from, the production everything-presence-pro devices on the network.
+substitutions:
+  name: "ep-soak-19a"
+  friendly_name: "EP Soak 1.9a"
+  hidden_ssid: "false"
+  factory_reset_disabled: "true"
+  uart_target_output_disabled: "true"
+  uart_presence_output_disabled: "true"
+  log_level: "DEBUG"
+
+  # Soak knobs: restart at a random point in [soak_min_ms, soak_max_ms] after
+  # boot, spanning PHY reset, ethernet bring-up and steady-state running.
+  soak_min_ms: "40"
+  soak_max_ms: "6000"
+  # Drive the relay (GPIO12, the VDD_SDIO strapping pin) high on odd boots
+  soak_toggle_relay: "false"
+  # Every Nth boot, force a watchdog reset instead of a clean esp_restart.
+  # 0 disables. Watchdog resets are slower (~5-10s of stall each) so keep N
+  # high enough that the run still gets through plenty of boots.
+  soak_wdt_every: "4"
+
+  device_config:
+    ethernet_enabled: true
+    co2_enabled: false
+    bluetooth_enabled: false
+    board_revision: "1.9a"
+    sensor_variant: "ld2450+sen0609"
+    firmware_channel: "prototype"
+    model: "everything-presence-pro"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+    version: recommended
+
+packages:
+   pro_base: !include common/everything-presence-pro-base.yaml
+   ld2450_base: !include common/ld2450-base.yaml
+   sen0609_base: !include common/sen0609-base.yaml
+   ethernet_base: !include common/ethernet-base-1.9a.yaml
+   boot_soak: !include common/boot-soak-test.yaml
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: True
+  on_boot:
+    - priority: -100
+      then:
+        - lambda: |-
+            id(firmware_network).publish_state("Ethernet");
+            id(firmware_co2).publish_state("Disabled");
+            id(firmware_ble).publish_state("Disabled");
+
+# Only present because the shared base package references update_http_request.
+# The URL is intentionally a dead prototype path - never OTA a soak build.
+update:
+  - platform: http_request
+    id: update_http_request
+    name: Firmware Update
+    source: http://docs.everythingsmart.io/update/everything-presence-pro/prototype/soak-1.9a-manifest.json
