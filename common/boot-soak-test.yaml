@@ -85,6 +85,9 @@ esphome:
               # unit can experience short of a brownout.
               - lambda: 'ESP_LOGW("soak", "SOAK-WDT blocking loop to force a watchdog reset");'
               - delay: 20ms
-              - lambda: 'while (true) { }'
+              - lambda: |-
+                  // volatile so the loop cannot be optimised away
+                  volatile uint32_t spin = 0;
+                  while (true) { spin++; }
             else:
               - lambda: 'arch_restart();'
