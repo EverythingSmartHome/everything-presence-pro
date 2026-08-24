@@ -51,7 +51,7 @@ ROM_BANNER = re.compile(
     r"rst:(0x[0-9a-fA-F]+)\s*\(([^)]*)\),\s*boot:(0x[0-9a-fA-F]+)\s*\((.+)$"
 )
 DOWNLOAD_HINT = re.compile(r"waiting for download|DOWNLOAD_BOOT", re.I)
-APP_ALIVE = re.compile(r"SOAK-BOOT n=(\d+)|ESPHome version")
+APP_ALIVE = re.compile(r"SOAK-APP-START|SOAK-BOOT n=\d+|ESPHome version")
 ETH_UP = re.compile(r"IP Address|link up|Connected to", re.I)
 
 

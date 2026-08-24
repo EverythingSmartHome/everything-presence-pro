@@ -2,18 +2,32 @@
 #
 # Reboots the device continuously at a randomised delay after boot so that
 # resets land at every possible point in the startup sequence: PHY reset,
-# ethernet bring-up and steady-state running. A board that strap-faults into UART
-# download mode will stop producing ESPHome logs and the ROM will print
+# ethernet bring-up and steady-state running. A board that strap-faults into
+# UART download mode will stop producing ESPHome logs and the ROM will print
 # "boot:0x3 (DOWNLOAD_BOOT...)" / "waiting for download" instead, which is
 # what scripts/boot-soak.py watches for.
 #
-# The restart is a raw arch_restart() (esp_restart with no component
-# teardown) on purpose: a graceful shutdown would deinit the ethernet driver
-# and release the PHY reset GPIO, which is exactly the failure mode we are
-# trying to provoke.
+# Two reset styles, chosen at random each boot:
+#
+#   esp_restart  raw arch_restart() with no component teardown. A graceful
+#                shutdown would deinit the ethernet driver and release the PHY
+#                reset GPIO, hiding the exact fault we are hunting.
+#   watchdog     block the main loop to starve the task watchdog
+#                (CONFIG_ESP_TASK_WDT_PANIC=y, 5s). The chip resets with no
+#                shutdown path at all, so whatever GPIO0 is driving at that
+#                instant is still driving when the chip re-straps.
 #
 # Required substitutions (see test-boot-soak-*.yaml):
 #   soak_min_ms, soak_max_ms, soak_toggle_relay, soak_wdt_every
+
+# ESPHome's boot-loop protection has to be off for a soak build. The soak
+# restarts far sooner than boot_is_good_after (60s), so every cycle counts as
+# an unsuccessful boot; after num_attempts (10) safe mode activates for 5
+# minutes, stops running on_boot automations and silently ends the run. This
+# only disables it for the TEST build - the shipping prototype configs keep
+# safe mode exactly as production has it.
+safe_mode:
+  disabled: true
 
 debug:
   update_interval: 60s
@@ -33,25 +47,44 @@ globals:
     type: uint32_t
     restore_value: false
     initial_value: '0'
+  - id: soak_use_wdt
+    type: bool
+    restore_value: false
+    initial_value: 'false'
 
 esphome:
   on_boot:
-    # Earliest practical hook - prove the app actually started running
+    # Earliest practical hook - proves the app actually started running.
+    #
+    # Deliberately does NOT touch soak_boot_count. Restoring globals are set up
+    # at setup_priority::HARDWARE (100), so at priority 800 the counter has not
+    # been restored yet and any increment here is silently overwritten a moment
+    # later - which stalls the counter at 1 and, if the reset style were keyed
+    # off it, would mean the watchdog path never runs at all.
     - priority: 800
       then:
-        - lambda: |-
-            id(soak_boot_count) += 1;
-            ESP_LOGW("soak", "SOAK-BOOT n=%u", (unsigned) id(soak_boot_count));
+        - lambda: 'ESP_LOGW("soak", "SOAK-APP-START");'
 
-    # Latest hook - everything (including ethernet) has been set up by now
+    # Latest hook - globals are restored and everything (including ethernet)
+    # has been set up by now.
     - priority: -100
       then:
         - lambda: |-
+            id(soak_boot_count) += 1;
+
             const uint32_t lo = ${soak_min_ms};
             const uint32_t hi = ${soak_max_ms};
             id(soak_delay_ms) = lo + (random_uint32() % (hi - lo + 1));
-            ESP_LOGW("soak", "SOAK-ARM n=%u delay=%ums",
-                     (unsigned) id(soak_boot_count), (unsigned) id(soak_delay_ms));
+
+            // Pick the reset style randomly rather than every-Nth-boot, so it
+            // does not depend on the persisted counter surviving a reset.
+            id(soak_use_wdt) = (${soak_wdt_every} > 0) &&
+                               (random_uint32() % ${soak_wdt_every} == 0);
+
+            ESP_LOGW("soak", "SOAK-BOOT n=%u delay=%ums style=%s",
+                     (unsigned) id(soak_boot_count),
+                     (unsigned) id(soak_delay_ms),
+                     id(soak_use_wdt) ? "watchdog" : "esp_restart");
         - if:
             condition:
               lambda: 'return ${soak_toggle_relay} && (id(soak_boot_count) % 2 == 1);'
@@ -65,24 +98,17 @@ esphome:
               - switch.turn_off: system_alarm_relay
         - delay: !lambda 'return id(soak_delay_ms);'
         - lambda: |-
-            ESP_LOGW("soak", "SOAK-RESTART n=%u eth_connected=%d relay=%d",
+            ESP_LOGW("soak", "SOAK-RESTART n=%u style=%s eth_connected=%d relay=%d",
                      (unsigned) id(soak_boot_count),
+                     id(soak_use_wdt) ? "watchdog" : "esp_restart",
                      (int) id(eth_component).is_connected(),
                      (int) id(system_alarm_relay).state);
             global_preferences->sync();
         - delay: 50ms
         - if:
             condition:
-              lambda: |-
-                return ${soak_wdt_every} > 0 &&
-                       (id(soak_boot_count) % ${soak_wdt_every} == 0);
+              lambda: 'return id(soak_use_wdt);'
             then:
-              # Every Nth boot, die by watchdog instead of by esp_restart.
-              # Blocking the main loop starves the task watchdog, which resets
-              # the chip abruptly with no shutdown path at all - so whatever
-              # GPIO0 happens to be driving at that instant is still driving
-              # when the chip re-straps. This is the harshest reset a shipped
-              # unit can experience short of a brownout.
               - lambda: 'ESP_LOGW("soak", "SOAK-WDT blocking loop to force a watchdog reset");'
               - delay: 20ms
               - lambda: |-
