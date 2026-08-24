@@ -145,6 +145,66 @@ introduced by 1.9, but it is worth a pass with the relay energised.
 **Remember to reflash the normal prototype firmware afterwards** — a soak
 build reboots forever by design.
 
+## Known issue on 1.9: USB flashing
+
+**Once any firmware is running on a 1.9 board, esptool cannot put it into UART
+download mode.** Every attempt fails with:
+
+    Failed to connect to ESP32: Wrong boot mode detected (0x13)!
+    The chip needs to be in download mode.
+
+Reproduced consistently, both with the board idle and with it in a fast reboot
+loop. It is not a timing race that a retry fixes. Holding GPIO0 low for 1.5s -
+thirty times esptool's ~50ms window - still strapped high and booted the
+application, so the adapter's auto-reset transistor is not winning against the
+PHY reset network on that pin.
+
+Recovery is over the network: `esphome upload <config>.yaml --device <ip>`.
+That worked reliably, and ESPHome's safe mode brings OTA up even after a boot
+loop, so a 1.9 unit is not bricked by this. But it does mean:
+
+- USB recovery of a 1.9 board with a bad image depends on OTA still working.
+  A build that fails before ethernet comes up would be unrecoverable in the
+  field without pulling GPIO0 low by hand.
+- Production flashing needs the jig to hold GPIO0 low itself rather than
+  relying on the USB adapter, or needs to flash before the PHY is populated.
+
+Worth a hardware look: whatever sits on the GPIO0 / nRST net (pull-up value, a
+reset RC) is strong enough to defeat the auto-reset circuit. `scripts/enter-
+download.py` is in the repo to retry this with longer holds, but on the board
+tested it did not succeed.
+
 ## Results
 
-See the PR description for measured results.
+Measured on the 1.9 prototype, ESPHome 2026.6.4 / ESP-IDF 5.5.4, ESP32 rev3.1.
+
+**Ethernet works.** Link comes up at 100Mbit full duplex and DHCP resolves
+(10.4.12.160). `esp_eth_driver_install` succeeds with the PHY reset on GPIO0;
+driver setup takes ~1.9s. 132 further link-ups were observed across the soak.
+
+**Boot mode: 433 resets, zero failures.**
+
+| Test | Resets | Normal flash boot | Download mode |
+|---|---|---|---|
+| Hard reset (EN pulse, randomised 0.35-5.0s) | 250 | 250 | 0 |
+| Software + watchdog (randomised 40-6000ms) | 183 | 183 | 0 |
+| **Total** | **433** | **433** | **0** |
+
+The software run included **44 watchdog aborts** (confirmed in the log as
+`task_wdt: Task watchdog got triggered ... Aborting ... Rebooting`), which is
+the abrupt no-shutdown path where GPIO0 is still being driven as the chip
+re-straps. All 183 reported `rst:0xc (SW_CPU_RESET)`; the watchdog path lands
+there too because the panic handler restarts the chip.
+
+**Verdict for 1.9: no boot-mode problem found.** That is consistent with the
+mechanism - GPIO0 is low for only 150us per boot and driven high the rest of
+the time - rather than just being a lucky run. The remaining exposure is a
+reset landing inside that 150us window, which at 433 samples this test would
+not be expected to hit; the argument for 1.9 being safe rests on the mechanism,
+with the soak confirming nothing else is going on.
+
+**1.9a: not hardware-tested.** Both 1.9a images build and validate, and the
+IDF ordering analysis above says the design should work, but no 1.9a board was
+soaked. Run both phases against it before trusting it - it is the revision with
+the real theoretical exposure, since a free-running oscillator on GPIO0 would
+fail roughly half of all boots rather than one in many thousands.
