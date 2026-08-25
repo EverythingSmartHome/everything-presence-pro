@@ -1,0 +1,171 @@
+# LAN8720A PHY diagnostics - PROTOTYPE BRING-UP ONLY, NEVER SHIP THIS.
+#
+# Reads the PHY over MDIO every 5s and, in later phases, forces fixed link
+# modes so a link failure can be attributed rather than guessed at. Uses the
+# public get_eth_handle() on ESPHome's ethernet component plus ESP-IDF's
+# ETH_CMD_READ_PHY_REG / ETH_CMD_WRITE_PHY_REG ioctls.
+#
+# Register map that matters:
+#
+#   BMCR  (reg 0)  bit 12 auto-negotiation enable, bit 13 speed (1=100M),
+#                  bit 8 duplex (1=full), bit 9 restart auto-negotiation
+#   BMSR  (reg 1)  bit 2  link status (LATCHING LOW - read twice)
+#                  bit 5  auto-negotiation complete
+#                  bit 4  remote fault
+#   ANLPAR(reg 5)  link partner ability. Non-zero means the PHY is HEARING the
+#                  switch, which clears the analog path (cable, magnetics,
+#                  pairs) of suspicion.
+#   MCSR  (reg 17) bit 1  ENERGYON - energy detected on the line
+#   SPMODE(reg 18) bits [4:0] strapped PHY address, bits [7:5] strapped MODE
+#                  (7 = all-capable with auto-negotiation)
+#   SCSR  (reg 31) bit 12 auto-negotiation done, bits [4:2] speed indication
+#
+# Phase schedule (each tick is 5s), cycling forever:
+#
+#   ticks  0-2   observe auto-negotiation as configured
+#   tick   3     SOFT-RESET the PHY (BMCR bit 15), then re-enable auto-neg
+#   ticks  4-7   observe - see note below
+#   tick   8     force 100M full duplex, auto-negotiation OFF
+#   ticks  9-11  observe
+#   tick   12    force 10M full duplex, auto-negotiation OFF
+#   ticks 13-15  observe
+#   tick   16    re-enable auto-negotiation and restart it
+#
+# The soft-reset phase is the important one on 1.9a. If GPIO17 gates the
+# external oscillator as well as releasing PHY reset, the PHY leaves reset at
+# the same moment its reference clock starts, and may latch its configuration
+# before that clock is stable. Re-resetting the PHY once the clock has been
+# running for seconds is the direct test of that theory - and if link comes up
+# afterwards, it is also the fix (a PHY soft reset after setup).
+#
+# Reading the result: 10BASE-T is far more tolerant of reference-clock error
+# than 100BASE-TX. If 10M links and 100M does not, suspect the 50MHz reference
+# clock (wrong frequency, or not reaching the PHY). If neither links while
+# ANLPAR is populated, the PHY can receive but not transmit.
+
+globals:
+  - id: phydiag_tick
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: phyflap_last
+    type: int
+    restore_value: false
+    initial_value: '-1'
+  - id: phyflap_since
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          auto handle = id(eth_component).get_eth_handle();
+          if (handle == nullptr) {
+            ESP_LOGW("phydiag", "no eth handle yet");
+            return;
+          }
+
+          auto read_reg = [&](uint32_t addr, uint32_t *out) -> bool {
+            esp_eth_phy_reg_rw_data_t rw = {};
+            rw.reg_addr = addr;
+            rw.reg_value_p = out;
+            return esp_eth_ioctl(handle, ETH_CMD_READ_PHY_REG, &rw) == ESP_OK;
+          };
+          auto write_reg = [&](uint32_t addr, uint32_t value) -> bool {
+            esp_eth_phy_reg_rw_data_t rw = {};
+            rw.reg_addr = addr;
+            rw.reg_value_p = &value;
+            return esp_eth_ioctl(handle, ETH_CMD_WRITE_PHY_REG, &rw) == ESP_OK;
+          };
+
+          int tick = id(phydiag_tick)++;
+          int phase = tick % 17;
+
+          if (phase == 3) {
+            ESP_LOGW("phydiag", "=== SOFT-RESETTING PHY (clock has been stable for ~15s) ===");
+            write_reg(0, 0x8000);
+            delay(50);
+            write_reg(0, 0x1200);   // auto-negotiation enable + restart
+            return;
+          }
+          if (phase == 8) {
+            ESP_LOGW("phydiag", "=== forcing 100M FULL DUPLEX, autoneg OFF ===");
+            write_reg(0, 0x2100);
+            return;
+          }
+          if (phase == 12) {
+            ESP_LOGW("phydiag", "=== forcing 10M FULL DUPLEX, autoneg OFF ===");
+            write_reg(0, 0x0100);
+            return;
+          }
+          if (phase == 16) {
+            ESP_LOGW("phydiag", "=== re-enabling auto-negotiation ===");
+            write_reg(0, 0x1200);
+            return;
+          }
+
+          struct { const char *name; uint32_t addr; } regs[] = {
+            {"BMCR   (0)", 0},  {"BMSR   (1)", 1},  {"ANAR   (4)", 4},
+            {"ANLPAR (5)", 5},  {"MCSR  (17)", 17}, {"SCSR  (31)", 31},
+          };
+          for (auto &r : regs) {
+            uint32_t value = 0;
+            if (read_reg(r.addr, &value)) {
+              ESP_LOGI("phydiag", "%s = 0x%04X", r.name, (unsigned) (value & 0xFFFF));
+            } else {
+              ESP_LOGW("phydiag", "%s read failed", r.name);
+            }
+          }
+
+          // Link status latches low, so the second read is the live value.
+          uint32_t bmsr = 0, scsr = 0, mcsr = 0;
+          read_reg(1, &bmsr);
+          read_reg(31, &scsr);
+          read_reg(17, &mcsr);
+          const char *mode = (phase < 3) ? "autoneg"
+                           : (phase < 8) ? "autoneg-after-phy-reset"
+                           : (phase < 12) ? "forced-100M" : "forced-10M";
+          ESP_LOGW("phydiag", "SUMMARY mode=%s link=%s autoneg_done=%s energyon=%s speed_ind=%u",
+                   mode,
+                   (bmsr & (1 << 2)) ? "UP" : "DOWN",
+                   (scsr & (1 << 12)) ? "yes" : "no",
+                   (mcsr & (1 << 1)) ? "yes" : "no",
+                   (unsigned) ((scsr >> 2) & 0x7));
+
+  # Fast link-state sampler. The 5s phase loop above established that the link
+  # comes up and then drops; this samples BMSR every 250ms and logs only the
+  # TRANSITIONS, so up/down dwell times can be measured rather than guessed.
+  # A link that establishes at 100M full duplex and drops a second or two later
+  # points at reference-clock jitter/frequency error or a supply problem, not
+  # at cabling or configuration.
+  - interval: 250ms
+    then:
+      - lambda: |-
+          auto handle = id(eth_component).get_eth_handle();
+          if (handle == nullptr) return;
+
+          uint32_t bmsr = 0;
+          esp_eth_phy_reg_rw_data_t rw = {};
+          rw.reg_addr = 1;
+          rw.reg_value_p = &bmsr;
+          // Read twice: link status latches low, the second read is live.
+          if (esp_eth_ioctl(handle, ETH_CMD_READ_PHY_REG, &rw) != ESP_OK) return;
+          if (esp_eth_ioctl(handle, ETH_CMD_READ_PHY_REG, &rw) != ESP_OK) return;
+
+          int up = (bmsr & (1 << 2)) ? 1 : 0;
+          uint32_t now = millis();
+          if (id(phyflap_last) == -1) {
+            id(phyflap_last) = up;
+            id(phyflap_since) = now;
+            return;
+          }
+          if (up != id(phyflap_last)) {
+            ESP_LOGW("phyflap", "link %s after %u ms %s",
+                     up ? "UP" : "DOWN",
+                     (unsigned) (now - id(phyflap_since)),
+                     id(phyflap_last) ? "up" : "down");
+            id(phyflap_last) = up;
+            id(phyflap_since) = now;
+          }

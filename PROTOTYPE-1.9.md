@@ -176,7 +176,9 @@ tested it did not succeed.
 
 ## Results
 
-Measured on the 1.9 prototype, ESPHome 2026.6.4 / ESP-IDF 5.5.4, ESP32 rev3.1.
+Measured on ESPHome 2026.6.4 / ESP-IDF 5.5.4, ESP32 rev3.1.
+
+### 1.9
 
 **Ethernet works.** Link comes up at 100Mbit full duplex and DHCP resolves
 (10.4.12.160). `esp_eth_driver_install` succeeds with the PHY reset on GPIO0;
@@ -203,8 +205,74 @@ reset landing inside that 150us window, which at 433 samples this test would
 not be expected to hit; the argument for 1.9 being safe rests on the mechanism,
 with the soak confirming nothing else is going on.
 
-**1.9a: not hardware-tested.** Both 1.9a images build and validate, and the
-IDF ordering analysis above says the design should work, but no 1.9a board was
-soaked. Run both phases against it before trusting it - it is the revision with
-the real theoretical exposure, since a free-running oscillator on GPIO0 would
-fail roughly half of all boots rather than one in many thousands.
+### 1.9a
+
+**Boot mode: 200/200 hard resets, zero download-mode boots.** Resets were timed
+to land 2.5-7.0s after boot, deliberately later than the ~1.9s ethernet setup,
+so every one of them happened with GPIO17 asserted and the oscillator running.
+That is the case the revision was suspected to fail.
+
+Two independent pieces of evidence say the oscillator is properly gated off
+while the chip is in reset, which is why this passes:
+
+- 200/200 clean boots with the oscillator running before each reset.
+- USB flashing works reliably on 1.9a. esptool can only enter download mode by
+  pulling GPIO0 low, which it could not do if the oscillator were driving that
+  net at reset. (Contrast 1.9, where esptool cannot enter download mode at
+  all.)
+
+**Ethernet does NOT work on 1.9a: the link flaps continuously and never holds.**
+
+This is a real hardware fault, and it is unrelated to boot mode. Measured by
+sampling BMSR every 250ms (`common/phy-diagnostics.yaml`):
+
+| State | Dwell time |
+|---|---|
+| Link up | 250-2000 ms |
+| Link down | ~1500 ms (very consistent) |
+
+It never stays up. ESPHome therefore never sees a connection at all - IDF polls
+link state on a ~2s timer and the link is usually down when it looks, and even
+when it catches an up it drops long before DHCP completes. The user-visible
+symptom is the RJ45 LEDs blinking on for about a second, then off for a couple
+of seconds, repeating.
+
+What the PHY registers say, and what each fact rules out:
+
+| Register | Value | Meaning |
+|---|---|---|
+| PHYID1/2 (2,3) | `0x0007` / `0xC0F1` | genuine LAN8720A, OUI 0x1F0 - MDIO fully working |
+| SPMODE (18) | `0x60E0` | PHYAD = 0 (matches config), MODE = 7 (all-capable, auto-neg) - strapping correct |
+| MCSR (17) | `0x0002` | ENERGYON = 1 - energy present on the line, cable is live |
+| ANLPAR (5) | `0xD141` | link partner ability received - the PHY *hears* the switch |
+| BMSR (1) | `0x7809` | link down, auto-negotiation not complete (when sampled down) |
+| SCSR (31) | speed_ind = 6 | when up, it resolves to **100M full duplex** |
+
+So the following are all cleared of suspicion: cable and switch port (same ones
+the 1.9 board used successfully), magnetics and differential pairs (energy
+detected, partner ability received), PHY identity and address, PHY mode
+strapping, MDIO, and the ESP32 side (MAC init succeeds, which requires a live
+50MHz on GPIO0).
+
+Forcing fixed modes does not help - neither forced 100M full duplex nor forced
+10M full duplex links at all. A PHY soft reset (BMCR bit 15) *does* bring the
+link up immediately at 100M full duplex, and it then drops again within a
+second or two, so this is not a workaround.
+
+**Prime suspect: the 50MHz reference clock at the PHY.** Auto-negotiation uses
+slow FLP pulses and is relatively clock-tolerant, which is why it completes;
+sustaining a 100BASE-TX link needs an accurate, low-jitter 50MHz for descrambler
+lock, which is where it fails. Worth checking, in order:
+
+1. Frequency, amplitude and jitter of the oscillator **measured at the PHY's
+   XTAL1/CLKIN pin**, not just at the oscillator output.
+2. Termination on the clock net. One oscillator driving two loads (ESP32 GPIO0
+   and the PHY) needs proper series termination; reflections show up as jitter.
+3. The PHY's REF_CLK mode strap (nINTSEL). If the PHY is strapped for REF_CLK
+   **Out** mode it will try to drive 50MHz onto the same net the external
+   oscillator drives - contention would produce exactly this symptom.
+4. The PHY supply rails under load, since the drop happens when the link starts
+   passing traffic.
+
+Until that is resolved, 1.9a is not usable as an ethernet board, even though
+its boot-mode behaviour is sound.
