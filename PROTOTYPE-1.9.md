@@ -171,6 +171,27 @@ Full flashes take ~7.6s at 2 Mbps. No boot-mode regression from the change: a
 further 200-cycle hard-reset soak after the fix was 200/200 clean, and ethernet
 still links at 100M full duplex with the PHY reset on GPIO0.
 
+### BOOT button
+
+The physical button was tested separately, since the automated test drives
+GPIO0 through the USB adapter and the button is a different path onto the same
+net. Sequence: hold BOOT, tap RESET, release BOOT.
+
+| Press timing | GPIO0 state at press | ROM result |
+|---|---|---|
+| 7s after boot, ethernet Connected with a DHCP lease | driven high by the PHY reset | `boot:0x3 DOWNLOAD_BOOT` + `waiting for download` |
+| 495ms after `Setup ethernet` completed, link not yet up | driven high by the PHY reset | `boot:0x3 DOWNLOAD_BOOT` + `waiting for download` |
+
+Both presses landed while the ethernet driver was actively driving GPIO0 high,
+which is the hard case - so the button beats a driven pin, not just an idle
+one. A press during the first ~850ms, before the driver takes the pin, is the
+easy case and is implied by these.
+
+A full flash was then performed through the button-entered download mode
+(`esptool --before no-reset`, 2 Mbps): all four images written and hash
+verified. So the button does not merely produce the right ROM banner, it leaves
+the chip in a state that can actually be flashed.
+
 ### Testing this correctly
 
 Each trial must boot the application and wait for ethernet to claim GPIO0 and
