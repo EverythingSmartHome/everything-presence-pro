@@ -4,3 +4,7 @@
 /.esphome/
 /secrets.yaml
 
+
+# Prototype firmware build output (binaries, not source)
+/dist/
+*.zip
