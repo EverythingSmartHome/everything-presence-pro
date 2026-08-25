@@ -221,21 +221,22 @@ while the chip is in reset, which is why this passes:
   net at reset. (Contrast 1.9, where esptool cannot enter download mode at
   all.)
 
-**Ethernet does NOT work on 1.9a: the link flaps continuously and never holds.**
+**Ethernet does NOT work on 1.9a: the link glitches constantly and DHCP never
+completes.**
 
-This is a real hardware fault, and it is unrelated to boot mode. Measured by
-sampling BMSR every 250ms (`common/phy-diagnostics.yaml`):
+This is a real hardware fault, unrelated to boot mode. The board never obtains
+an IP; the switch shows no lease for it.
 
-| State | Dwell time |
-|---|---|
-| Link up | 250-2000 ms |
-| Link down | ~1500 ms (very consistent) |
+The decisive measurement is ESPHome's ethernet event log, which sits at VERBOSE
+and so is invisible at the normal DEBUG level. With it enabled, over a ~105s
+window on otherwise stock firmware:
 
-It never stays up. ESPHome therefore never sees a connection at all - IDF polls
-link state on a ~2s timer and the link is usually down when it looks, and even
-when it catches an up it drops long before DHCP completes. The user-visible
-symptom is the RJ45 LEDs blinking on for about a second, then off for a couple
-of seconds, repeating.
+    22 x [Ethernet event] ETH connected
+    21 x [Ethernet event] ETH disconnected
+
+Link up for roughly 1.5-4s, down for roughly 1.5-2s, continuously. Every
+disconnect restarts DHCP, so DHCP never gets to finish, which is why ESPHome
+logs `Connecting failed; reconnecting` every 15s forever.
 
 What the PHY registers say, and what each fact rules out:
 
@@ -245,24 +246,44 @@ What the PHY registers say, and what each fact rules out:
 | SPMODE (18) | `0x60E0` | PHYAD = 0 (matches config), MODE = 7 (all-capable, auto-neg) - strapping correct |
 | MCSR (17) | `0x0002` | ENERGYON = 1 - energy present on the line, cable is live |
 | ANLPAR (5) | `0xD141` | link partner ability received - the PHY *hears* the switch |
-| BMSR (1) | `0x7809` | link down, auto-negotiation not complete (when sampled down) |
-| SCSR (31) | speed_ind = 6 | when up, it resolves to **100M full duplex** |
+| BMSR (1) | `0x782D` when up | link up, auto-negotiation complete |
+| SCSR (31) | `0x1058` | auto-neg done, speed indication 6 = **100M full duplex** |
 
-So the following are all cleared of suspicion: cable and switch port (same ones
+So the following are cleared of suspicion: cable and switch port (the same ones
 the 1.9 board used successfully), magnetics and differential pairs (energy
 detected, partner ability received), PHY identity and address, PHY mode
 strapping, MDIO, and the ESP32 side (MAC init succeeds, which requires a live
-50MHz on GPIO0).
+50MHz on GPIO0). Auto-negotiation completes correctly at 100M full duplex.
 
-Forcing fixed modes does not help - neither forced 100M full duplex nor forced
-10M full duplex links at all. A PHY soft reset (BMCR bit 15) *does* bring the
-link up immediately at 100M full duplex, and it then drops again within a
-second or two, so this is not a workaround.
+### Note on measuring this: BMSR link status latches low
 
-**Prime suspect: the 50MHz reference clock at the PHY.** Auto-negotiation uses
-slow FLP pulses and is relatively clock-tolerant, which is why it completes;
-sustaining a 100BASE-TX link needs an accurate, low-jitter 50MHz for descrambler
-lock, which is where it fails. Worth checking, in order:
+BMSR bit 2 is latching-low per 802.3 - it goes low on *any* link failure and
+stays low until read, then reports live state. This matters two ways:
+
+- ESP-IDF's `lan87xx_update_link_duplex_speed()` reads BMSR **once** per poll
+  (~2s timer) and uses the bit directly, so a brief glitch anywhere in that
+  window is reported as a full disconnect.
+- A diagnostic that reads BMSR twice and takes the second value sees *live*
+  state, and so reports the link as healthy. Doing that at 250ms intervals also
+  clears the latch constantly, which masks the very glitches being hunted.
+
+An earlier version of this document quoted flap dwell times taken while the
+diagnostic was also writing BMCR (forcing link modes, soft-resetting the PHY).
+Those numbers were contaminated and have been replaced by the event-log figures
+above, which come from stock firmware with no PHY writes at all.
+
+Likewise, "forced 100M and forced 10M do not link" should not be read as
+evidence about the clock: forcing a fixed mode against an auto-negotiating
+switch is unreliable by design (the partner falls back to parallel detection),
+so that test was inconclusive.
+
+**Leading hypothesis: marginal physical layer on the 1.9a-specific change, the
+external 50MHz clock.** Auto-negotiation uses slow FLP pulses and tolerates a
+poor clock, which is why it completes and reports 100M full duplex; sustaining
+a 100BASE-TX link needs an accurate, low-jitter reference, which is where brief
+errors would show up. This is a hypothesis, not a proven cause - the evidence
+establishes that the fault is physical-layer and 1.9a-specific, not that the
+clock is definitely at fault. To confirm or eliminate it:
 
 1. Frequency, amplitude and jitter of the oscillator **measured at the PHY's
    XTAL1/CLKIN pin**, not just at the oscillator output.
@@ -271,8 +292,7 @@ lock, which is where it fails. Worth checking, in order:
 3. The PHY's REF_CLK mode strap (nINTSEL). If the PHY is strapped for REF_CLK
    **Out** mode it will try to drive 50MHz onto the same net the external
    oscillator drives - contention would produce exactly this symptom.
-4. The PHY supply rails under load, since the drop happens when the link starts
-   passing traffic.
+4. PHY supply rails under load.
 
 Until that is resolved, 1.9a is not usable as an ethernet board, even though
 its boot-mode behaviour is sound.

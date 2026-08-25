@@ -22,6 +22,10 @@ substitutions:
   uart_presence_output_disabled: "true"
   log_level: "DEBUG"
 
+  # "false" = read-only observation (never writes to the PHY).
+  # "true"  = also force link modes and soft-reset the PHY to attribute a fault.
+  phydiag_active_probe: "false"
+
   device_config:
     ethernet_enabled: true
     co2_enabled: false
@@ -66,3 +70,48 @@ update:
     id: update_http_request
     name: Firmware Update
     source: http://docs.everythingsmart.io/update/everything-presence-pro/prototype/everything-presence-pro-ethernet-1.9a-manifest.json
+
+# Turn the ethernet event log up. ESPHome logs "[Ethernet event] ETH connected"
+# at VERBOSE, so at the normal DEBUG level it never appears - which is what hid
+# whether the MAC ever saw link at all. Everything chatty is muted so the
+# ethernet and esp_eth lines are readable.
+logger:
+  level: VERY_VERBOSE
+  logs:
+    ethernet: VERY_VERBOSE
+    esp_eth: VERY_VERBOSE
+    esp_netif_lwip: VERBOSE
+    phydiag: INFO
+    phyflap: WARN
+    uart_debug: WARN
+    component: WARN
+    scheduler: WARN
+    preferences: WARN
+    esp32.preferences: WARN
+    sensor: WARN
+    text_sensor: WARN
+    binary_sensor: WARN
+    number: WARN
+    select: WARN
+    switch: WARN
+    light: WARN
+    i2c: WARN
+    api: WARN
+    api.service: WARN
+    mdns: WARN
+    http_request: WARN
+    http_request.update: WARN
+    shtcx: WARN
+    bh1750: WARN
+    template.select: WARN
+    template.number: WARN
+    template.switch: WARN
+    template.binary_sensor: WARN
+    template.sensor: WARN
+    json: WARN
+    ld2450: WARN
+    safe_mode: WARN
+    ota: WARN
+    esphome.ota: WARN
+    update: WARN
+    debug: WARN

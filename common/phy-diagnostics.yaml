@@ -20,7 +20,12 @@
 #                  (7 = all-capable with auto-negotiation)
 #   SCSR  (reg 31) bit 12 auto-negotiation done, bits [4:2] speed indication
 #
-# Phase schedule (each tick is 5s), cycling forever:
+# Set the substitution `phydiag_active_probe` to "true" to enable the phase
+# schedule below, which WRITES to BMCR. Leave it "false" (the default use) for
+# pure observation - important when the question is whether the link flaps on
+# its own, since active probing would make the answer ambiguous.
+#
+# Phase schedule when active probing is enabled (each tick is 5s):
 #
 #   ticks  0-2   observe auto-negotiation as configured
 #   tick   3     SOFT-RESET the PHY (BMCR bit 15), then re-enable auto-neg
@@ -82,6 +87,14 @@ interval:
 
           int tick = id(phydiag_tick)++;
           int phase = tick % 17;
+
+
+          if (!${phydiag_active_probe}) {
+            // Read-only mode: never write BMCR. Observation must not be able to
+            // perturb the thing being observed - forcing link modes or soft
+            // resetting the PHY would make any measured flapping ambiguous.
+            phase = 0;
+          }
 
           if (phase == 3) {
             ESP_LOGW("phydiag", "=== SOFT-RESETTING PHY (clock has been stable for ~15s) ===");
