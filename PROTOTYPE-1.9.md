@@ -145,34 +145,44 @@ introduced by 1.9, but it is worth a pass with the relay energised.
 **Remember to reflash the normal prototype firmware afterwards** — a soak
 build reboots forever by design.
 
-## Known issue on 1.9: USB flashing
+## USB flashing on 1.9 - was broken, now fixed in hardware
 
-**Once any firmware is running on a 1.9 board, esptool cannot put it into UART
-download mode.** Every attempt fails with:
+**Original board.** Once any firmware was running, esptool could not put the
+board into UART download mode. Every attempt failed with:
 
     Failed to connect to ESP32: Wrong boot mode detected (0x13)!
     The chip needs to be in download mode.
 
-Reproduced consistently, both with the board idle and with it in a fast reboot
-loop. It is not a timing race that a retry fixes. Holding GPIO0 low for 1.5s -
-thirty times esptool's ~50ms window - still strapped high and booted the
-application, so the adapter's auto-reset transistor is not winning against the
-PHY reset network on that pin.
+Reproduced consistently, both idle and in a fast reboot loop - not a timing
+race a retry would fix. Holding GPIO0 low for 1.5s, thirty times esptool's
+~50ms window, still strapped high and booted the application. Recovery was over
+the network (`esphome upload <config>.yaml --device <ip>`), which worked
+reliably; ESPHome's safe mode brings OTA up even after a boot loop, so units
+were never bricked.
 
-Recovery is over the network: `esphome upload <config>.yaml --device <ip>`.
-That worked reliably, and ESPHome's safe mode brings OTA up even after a boot
-loop, so a 1.9 unit is not bricked by this. But it does mean:
+**After the hardware fix, measured with `scripts/download-mode-test.py`:**
 
-- USB recovery of a 1.9 board with a bad image depends on OTA still working.
-  A build that fails before ethernet comes up would be unrecoverable in the
-  field without pulling GPIO0 low by hand.
-- Production flashing needs the jig to hold GPIO0 low itself rather than
-  relying on the USB adapter, or needs to flash before the PHY is populated.
+| Test | Trials | Misses |
+|---|---|---|
+| Download-mode entry, application running with ethernet up | 40 | 0 |
+| Full flash at 2 Mbps | 10 | 0 |
 
-Worth a hardware look: whatever sits on the GPIO0 / nRST net (pull-up value, a
-reset RC) is strong enough to defeat the auto-reset circuit. `scripts/enter-
-download.py` is in the repo to retry this with longer holds, but on the board
-tested it did not succeed.
+Full flashes take ~7.6s at 2 Mbps. No boot-mode regression from the change: a
+further 200-cycle hard-reset soak after the fix was 200/200 clean, and ethernet
+still links at 100M full duplex with the PHY reset on GPIO0.
+
+### Testing this correctly
+
+Each trial must boot the application and wait for ethernet to claim GPIO0 and
+drive it high **before** attempting download mode. Against a freshly-reset or
+blank chip the test passes trivially even on a broken board, because GPIO0 is
+not being driven yet. `download-mode-test.py` does this warm-up by default.
+
+Note also that the auto-reset circuit is cross-coupled: asserting DTR and RTS
+together leaves both EN and GPIO0 high. They must never overlap - assert RTS
+alone to reset, then DTR alone for GPIO0. `scripts/enter-download.py` follows
+esptool's classic sequence with longer holds, and was what established the
+original fault was not a timing problem.
 
 ## Results
 
@@ -184,13 +194,18 @@ Measured on ESPHome 2026.6.4 / ESP-IDF 5.5.4, ESP32 rev3.1.
 (10.4.12.160). `esp_eth_driver_install` succeeds with the PHY reset on GPIO0;
 driver setup takes ~1.9s. 132 further link-ups were observed across the soak.
 
-**Boot mode: 433 resets, zero failures.**
+**Boot mode: 633 resets, zero failures.**
 
 | Test | Resets | Normal flash boot | Download mode |
 |---|---|---|---|
 | Hard reset (EN pulse, randomised 0.35-5.0s) | 250 | 250 | 0 |
 | Software + watchdog (randomised 40-6000ms) | 183 | 183 | 0 |
-| **Total** | **433** | **433** | **0** |
+| Hard reset, re-run after the GPIO0 hardware fix | 200 | 200 | 0 |
+| **Total** | **633** | **633** | **0** |
+
+The last row is a regression check: the flashing fix changes the GPIO0 net,
+which is the strapping pin, so making it pullable-low could in principle have
+made it marginal at reset. It did not.
 
 The software run included **44 watchdog aborts** (confirmed in the log as
 `task_wdt: Task watchdog got triggered ... Aborting ... Rebooting`), which is
