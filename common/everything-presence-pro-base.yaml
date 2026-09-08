@@ -168,17 +168,11 @@ binary_sensor:
       - delayed_off: !lambda 'return id(pir_off_delay).state * 1000.0;'
     on_state:
       then:
-        - lambda: |-
-            auto mode = id(system_alarm_mode).current_option();
-            if (mode == "Motion Only" || mode == "Motion or Presence") {
-              bool activate = id(pir_motion).state;
-              bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
-              if (desired) {
-                id(system_alarm_relay).turn_on();
-              } else {
-                id(system_alarm_relay).turn_off();
-              }
-            }
+        - if:
+            condition:
+              lambda: 'return id(system_alarm_mode).current_option() != "Disabled";'
+            then:
+              - script.execute: update_relay_state
 
   - platform: template
     name: Occupancy
@@ -190,17 +184,11 @@ binary_sensor:
       return id(dfrobot_presence).state || id(pir_motion).state || id(ld2450_occupancy).state;
     on_state:
       then:
-        - lambda: |-
-            auto mode = id(system_alarm_mode).current_option();
-            if (mode == "Presence Only" || mode == "Motion or Presence") {
-              bool activate = id(occupancy).state;
-              bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
-              if (desired) {
-                id(system_alarm_relay).turn_on();
-              } else {
-                id(system_alarm_relay).turn_off();
-              }
-            }
+        - if:
+            condition:
+              lambda: 'return id(system_alarm_mode).current_option() != "Disabled";'
+            then:
+              - script.execute: update_relay_state
         - if:
             condition:
               lambda: 'return id(led_mode_select).current_option() == "Presence" || id(led_mode_select).current_option() == "Environmental + Presence";'
@@ -215,6 +203,13 @@ binary_sensor:
       - delayed_off: !lambda 'return id(occupancy_off_delay).state * 1000.0;'
     lambda: |-
       return id(dfrobot_presence).state || id(ld2450_occupancy).state;
+    on_state:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(system_alarm_mode).current_option() != "Disabled";'
+            then:
+              - script.execute: update_relay_state
 
 light:
   - platform: esp32_rmt_led_strip
