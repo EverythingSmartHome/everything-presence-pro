@@ -339,6 +339,7 @@ select:
       - "Motion Only"
       - "Presence Only"
       - "Motion or Presence"
+      - "Motion and Presence"
     initial_option: "Disabled"
     restore_value: true
     on_value:
@@ -424,6 +425,8 @@ script:
             activate = id(occupancy).state;
           } else if (mode == "Motion or Presence") {
             activate = id(pir_motion).state || id(occupancy).state;
+          } else if (mode == "Motion and Presence") {
+            activate = id(pir_motion).state && id(mmwave_occupancy).state;
           }
 
           bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
