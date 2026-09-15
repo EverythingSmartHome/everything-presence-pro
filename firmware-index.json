@@ -1,17 +1,17 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-09-15T17:15:34.201Z",
+  "generatedAt": "2026-09-15T17:22:19.429Z",
   "product": {
     "id": "everything-presence-pro",
     "displayName": "Everything Presence Pro",
-    "latestVersion": "1.2.1"
+    "latestVersion": "1.3.0"
   },
   "firmwares": [
     {
-      "version": "1.2.1",
+      "version": "1.3.0",
       "channel": "stable",
       "releaseDate": "2026-09-15",
-      "releaseNotes": "Breaking change: Polygon zones only + automatic migration. Details: https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v1.2.1",
+      "releaseNotes": "Breaking change: Polygon zones only + automatic migration. Details: https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v1.3.0",
       "minPreviousVersion": "1.0.0",
       "variants": [
         {
