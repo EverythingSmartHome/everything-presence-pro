@@ -1,6 +1,6 @@
 {
   "name": "Everything Presence Pro Ethernet CO₂",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "home_assistant_domain": "esphome",
   "new_install_skip_erase": false,
   "builds": [
@@ -8,9 +8,7 @@
       "chipFamily": "ESP32",
       "ota": {
         "path": "everything-presence-pro-ethernet-co2/everything-presence-pro-esp32.ota.bin",
-        "md5": "f6fff6cb97a4818c7b589d96f7e3c176",
-        "summary": "Breaking change: Polygon zones only + automatic migration",
-        "release_url": "https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v1.2.1"
+        "md5": "cf20e572772e30901c5d2b9088c89282"
       },
       "parts": [
         {
