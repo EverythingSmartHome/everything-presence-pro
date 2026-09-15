@@ -1,20 +1,31 @@
 esphome:
-  on_boot: 
-    priority: -100
-    then:
-      - button.press: get_mmwave_firmware
-      - binary_sensor.template.publish:
-          id: ld2450_zone1_occupancy
-          state: false 
-      - binary_sensor.template.publish:
-          id: ld2450_zone2_occupancy
-          state: false 
-      - binary_sensor.template.publish:
-          id: ld2450_zone3_occupancy
-          state: false 
-      - binary_sensor.template.publish:
-          id: ld2450_zone4_occupancy
-          state: false
+  on_boot:
+    # List form so this merges with the on_boot list in the variant YAMLs
+    # instead of being discarded by the package merge.
+    - priority: -100
+      then:
+        - button.press: get_mmwave_firmware
+        - text_sensor.template.publish:
+            id: entry_exit_last_decision
+            state: "Idle"
+        - text_sensor.template.publish:
+            id: entry_exit_last_zone
+            state: "None"
+        - binary_sensor.template.publish:
+            id: assumed_present
+            state: false
+        - binary_sensor.template.publish:
+            id: ld2450_zone1_occupancy
+            state: false 
+        - binary_sensor.template.publish:
+            id: ld2450_zone2_occupancy
+            state: false 
+        - binary_sensor.template.publish:
+            id: ld2450_zone3_occupancy
+            state: false 
+        - binary_sensor.template.publish:
+            id: ld2450_zone4_occupancy
+            state: false
 
 globals:
   - id: mmwave_update_time
@@ -49,6 +60,14 @@ globals:
     type: bool
     restore_value: False
     initial_value: 'false'
+  - id: assumed_present_hold_active
+    type: bool
+    restore_value: False
+    initial_value: 'false'
+  - id: assumed_present_until_ms
+    type: unsigned long
+    restore_value: False
+    initial_value: '0'
 
 
 interval:
@@ -71,6 +90,16 @@ text_sensor:
     name: "Tracking Sensor Firmware"
     id: "ld2450_firmware"
     entity_category: diagnostic
+  - platform: template
+    name: "Entry Exit Last Decision"
+    id: entry_exit_last_decision
+    entity_category: diagnostic
+    disabled_by_default: true
+  - platform: template
+    name: "Entry Exit Last Entry Zone"
+    id: entry_exit_last_zone
+    entity_category: diagnostic
+    disabled_by_default: true
 
 button:
   - platform: template
@@ -349,7 +378,44 @@ number:
     initial_value: 3
     entity_category: config
 
+  # Grace period after the static presence radar stops seeing anyone while a
+  # tracking hold is active. 0 = hold lasts exactly as long as static presence.
+  - platform: template
+    name: "Assume Present Timeout"
+    id: assume_present_timeout_s
+    min_value: 0
+    max_value: 43200
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+    unit_of_measurement: "s"
+    entity_category: config
+
 sensor:
+  - platform: template
+    name: "Assumed Present Remaining"
+    id: assumed_present_remaining_s
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    update_interval: never
+    entity_category: diagnostic
+  - platform: template
+    name: "Entry Exit Last Target X"
+    id: entry_exit_last_target_x
+    accuracy_decimals: 0
+    unit_of_measurement: 'mm'
+    update_interval: never
+    entity_category: diagnostic
+    disabled_by_default: true
+  - platform: template
+    name: "Entry Exit Last Target Y"
+    id: entry_exit_last_target_y
+    accuracy_decimals: 0
+    unit_of_measurement: 'mm'
+    update_interval: never
+    entity_category: diagnostic
+    disabled_by_default: true
   - platform: template
     name: "Target 1 X"
     id: ld2450_target1_x
@@ -725,7 +791,35 @@ text:
     disabled_by_default: false
     entity_category: config
     icon: "mdi:vector-polygon"
-    on_value: 
+    on_value:
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+  - platform: template
+    name: "Polygon Entry 1"
+    id: poly_entry_1
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value:
+      globals.set:
+        id: poly_initialized
+        value: 'false'
+  - platform: template
+    name: "Polygon Entry 2"
+    id: poly_entry_2
+    mode: text
+    optimistic: true
+    restore_value: true
+    initial_value: ""
+    disabled_by_default: false
+    entity_category: config
+    icon: "mdi:vector-polygon"
+    on_value:
       globals.set:
         id: poly_initialized
         value: 'false'
@@ -791,6 +885,18 @@ uart:
 
           static ParsedPolygon poly_zones[4];
           static ParsedPolygon poly_exclusions[2];
+          static ParsedPolygon poly_entries[2];
+
+          // Entry/exit classification state. For each target we only need to know
+          // whether its last position was inside each entry zone and when it was
+          // last seen outside that zone, so no position history buffer is needed.
+          const unsigned long ENTRY_WINDOW_MS = 30000;
+          static bool prev_detected[3] = {false, false, false};
+          static unsigned long last_seen_ms[3] = {0, 0, 0};
+          static float last_x[3] = {0, 0, 0};
+          static float last_y[3] = {0, 0, 0};
+          static bool in_entry[3][2] = {{false, false}, {false, false}, {false, false}};
+          static unsigned long outside_entry_ms[3][2] = {{0, 0}, {0, 0}, {0, 0}};
 
           auto parse_polygon_text = [](const std::string& text, ParsedPolygon& poly) {
             poly.count = 0;
@@ -828,6 +934,22 @@ uart:
             return inside;
           };
 
+          auto update_entry_state = [&](int i, float x, float y) {
+            bool fresh_track = (last_seen_ms[i] == 0) || ((now - last_seen_ms[i]) > ENTRY_WINDOW_MS);
+            for (int e = 0; e < 2; e++) {
+              bool now_in = point_in_poly(x, y, poly_entries[e]);
+              if (fresh_track) {
+                outside_entry_ms[i][e] = now_in ? 0 : now;
+              } else if (!now_in) {
+                outside_entry_ms[i][e] = now;
+              }
+              in_entry[i][e] = now_in;
+            }
+            last_x[i] = x;
+            last_y[i] = y;
+            last_seen_ms[i] = now;
+          };
+
           if (!id(poly_initialized)) {
             parse_polygon_text(id(poly_zone_1).state, poly_zones[0]);
             parse_polygon_text(id(poly_zone_2).state, poly_zones[1]);
@@ -835,6 +957,8 @@ uart:
             parse_polygon_text(id(poly_zone_4).state, poly_zones[3]);
             parse_polygon_text(id(poly_exclusion_1).state, poly_exclusions[0]);
             parse_polygon_text(id(poly_exclusion_2).state, poly_exclusions[1]);
+            parse_polygon_text(id(poly_entry_1).state, poly_entries[0]);
+            parse_polygon_text(id(poly_entry_2).state, poly_entries[1]);
             id(poly_initialized) = true;
             ESP_LOGD("LD2450", "Init polys");
           }
@@ -889,6 +1013,7 @@ uart:
                 if (point_in_poly(p1_x, p1_y, poly_zones[1])) { zone_counts[1]++; id(last_zone_hold) = 2; }
                 if (point_in_poly(p1_x, p1_y, poly_zones[2])) { zone_counts[2]++; id(last_zone_hold) = 3; }
                 if (point_in_poly(p1_x, p1_y, poly_zones[3])) { zone_counts[3]++; id(last_zone_hold) = 4; }
+                update_entry_state(0, p1_x, p1_y);
               }
               if (update_entities) {
                 switch (id(extra_entities)) {
@@ -999,6 +1124,7 @@ uart:
                 if (point_in_poly(p2_x, p2_y, poly_zones[1])) { zone_counts[1]++; id(last_zone_hold) = 2; }
                 if (point_in_poly(p2_x, p2_y, poly_zones[2])) { zone_counts[2]++; id(last_zone_hold) = 3; }
                 if (point_in_poly(p2_x, p2_y, poly_zones[3])) { zone_counts[3]++; id(last_zone_hold) = 4; }
+                update_entry_state(1, p2_x, p2_y);
               }
               if (update_entities) {
                 switch (id(extra_entities)) {
@@ -1108,6 +1234,7 @@ uart:
                 if (point_in_poly(p3_x, p3_y, poly_zones[1])) { zone_counts[1]++; id(last_zone_hold) = 2; }
                 if (point_in_poly(p3_x, p3_y, poly_zones[2])) { zone_counts[2]++; id(last_zone_hold) = 3; }
                 if (point_in_poly(p3_x, p3_y, poly_zones[3])) { zone_counts[3]++; id(last_zone_hold) = 4; }
+                update_entry_state(2, p3_x, p3_y);
               }
               
               if (update_entities) {
@@ -1197,20 +1324,104 @@ uart:
             }
           }
 
-          if(id(last_zone_hold) != 0 && (!id(ld2450_assumed_presence).state || id(dfrobot_presence).state == false)) {
-            id(last_zone_hold) = 0;
-          }
           bool any_detected = p1_detected || p2_detected || p3_detected;
+          bool detected_now[3] = {p1_detected, p2_detected, p3_detected};
+          bool ap_enabled = id(ld2450_assumed_presence).state;
+          bool static_present = id(dfrobot_sensor).state && id(dfrobot_presence).state;
+          unsigned long hold_ms = (unsigned long)(id(assume_present_timeout_s).state * 1000.0f);
+          bool hold_active = id(assumed_present_hold_active);
+          unsigned long hold_until = id(assumed_present_until_ms);
+
+          // A target seen outside the held zone releases the zone hold
           if (any_detected && id(last_zone_hold) != 0) {
             int held_idx = id(last_zone_hold) - 1;
             if (zone_counts[held_idx] == 0) {
               id(last_zone_hold) = 0;
             }
           }
-          id(assumed_present).publish_state(!any_detected && id(last_zone_hold) != 0);
-          id(ld2450_occupancy).publish_state(any_detected || id(last_zone_hold) != 0);
 
-          id(ld2450_zone1_occupancy).publish_state(zone_counts[0] > 0 || id(last_zone_hold) == 1);
-          id(ld2450_zone2_occupancy).publish_state(zone_counts[1] > 0 || id(last_zone_hold) == 2);
-          id(ld2450_zone3_occupancy).publish_state(zone_counts[2] > 0 || id(last_zone_hold) == 3);
-          id(ld2450_zone4_occupancy).publish_state(zone_counts[3] > 0 || id(last_zone_hold) == 4);
+          if (any_detected) {
+            if (hold_active) {
+              id(entry_exit_last_decision).publish_state("Target Reacquired");
+              id(entry_exit_last_zone).publish_state("None");
+            }
+            hold_active = false;
+          } else if (ap_enabled) {
+            // The last tracked target has just been lost. Decide whether it left
+            // through an entry zone (valid exit, no hold) or vanished somewhere
+            // else (assume they are still present and start a hold).
+            for (int i = 0; i < 3; i++) {
+              if (!(prev_detected[i] && !detected_now[i])) continue;
+              bool e_valid[2] = {poly_entries[0].count >= 3, poly_entries[1].count >= 3};
+              bool exit_e[2] = {false, false};
+              for (int e = 0; e < 2; e++) {
+                if (!e_valid[e]) continue;
+                bool recent_outside = outside_entry_ms[i][e] != 0 && (now - outside_entry_ms[i][e]) <= ENTRY_WINDOW_MS;
+                exit_e[e] = in_entry[i][e] && recent_outside;
+              }
+              bool valid_exit = exit_e[0] || exit_e[1];
+              const char *decision_zone = "None";
+              if (exit_e[0] && exit_e[1]) decision_zone = "Both";
+              else if (exit_e[0]) decision_zone = "Entry 1";
+              else if (exit_e[1]) decision_zone = "Entry 2";
+              else if (e_valid[0] || e_valid[1]) decision_zone = "Unknown";
+              id(entry_exit_last_target_x).publish_state(last_x[i]);
+              id(entry_exit_last_target_y).publish_state(last_y[i]);
+              if (valid_exit) {
+                hold_active = false;
+                id(last_zone_hold) = 0;
+                id(entry_exit_last_decision).publish_state("Valid Exit");
+              } else {
+                hold_active = true;
+                hold_until = now + hold_ms;
+                id(entry_exit_last_decision).publish_state("Hold Started");
+              }
+              id(entry_exit_last_zone).publish_state(decision_zone);
+              break;
+            }
+          }
+
+          if (!ap_enabled) {
+            hold_active = false;
+          }
+
+          if (hold_active) {
+            if (static_present) {
+              // Static presence radar still sees someone: keep the hold alive
+              hold_until = now + hold_ms;
+            } else if ((long)(now - hold_until) >= 0) {
+              hold_active = false;
+              id(entry_exit_last_decision).publish_state("Hold Expired");
+              id(entry_exit_last_zone).publish_state("None");
+            }
+          }
+
+          if (!hold_active && !any_detected) {
+            id(last_zone_hold) = 0;
+          }
+
+          id(assumed_present_hold_active) = hold_active;
+          id(assumed_present_until_ms) = hold_until;
+          id(assumed_present).publish_state(hold_active);
+          {
+            static int last_remaining = -1;
+            int remaining = 0;
+            if (hold_active) {
+              long r = (long)(hold_until - now);
+              remaining = r > 0 ? (int)((r + 999) / 1000) : 0;
+            }
+            if (remaining != last_remaining) {
+              id(assumed_present_remaining_s).publish_state(remaining);
+              last_remaining = remaining;
+            }
+          }
+          id(ld2450_occupancy).publish_state(any_detected || hold_active);
+
+          id(ld2450_zone1_occupancy).publish_state(zone_counts[0] > 0 || (hold_active && id(last_zone_hold) == 1));
+          id(ld2450_zone2_occupancy).publish_state(zone_counts[1] > 0 || (hold_active && id(last_zone_hold) == 2));
+          id(ld2450_zone3_occupancy).publish_state(zone_counts[2] > 0 || (hold_active && id(last_zone_hold) == 3));
+          id(ld2450_zone4_occupancy).publish_state(zone_counts[3] > 0 || (hold_active && id(last_zone_hold) == 4));
+
+          prev_detected[0] = p1_detected;
+          prev_detected[1] = p2_detected;
+          prev_detected[2] = p3_detected;
