@@ -26,6 +26,12 @@ esphome:
         - binary_sensor.template.publish:
             id: ld2450_zone4_occupancy
             state: false
+        - binary_sensor.template.publish:
+            id: ld2450_entry1_occupancy
+            state: false
+        - binary_sensor.template.publish:
+            id: ld2450_entry2_occupancy
+            state: false
 
 globals:
   - id: mmwave_update_time
@@ -260,6 +266,15 @@ binary_sensor:
     filters:
       - delayed_off: !lambda return (id(ld2450_zone4_off_delay).state * 1000);
     disabled_by_default: true
+
+  - platform: template
+    name: "Entry 1 Presence"
+    device_class: occupancy
+    id: ld2450_entry1_occupancy
+  - platform: template
+    name: "Entry 2 Presence"
+    device_class: occupancy
+    id: ld2450_entry2_occupancy
 
   - platform: template
     name: "Target 1 Active"
@@ -592,6 +607,22 @@ sensor:
     unit_of_measurement: " "
     entity_category: diagnostic
   - platform: template
+    name: "Entry 1 Target Count"
+    id: ld2450_entry1_target_count
+    accuracy_decimals: 0
+    unit_of_measurement: ' '
+    state_class: measurement
+    entity_category: diagnostic
+    disabled_by_default: true
+  - platform: template
+    name: "Entry 2 Target Count"
+    id: ld2450_entry2_target_count
+    accuracy_decimals: 0
+    unit_of_measurement: ' '
+    state_class: measurement
+    entity_category: diagnostic
+    disabled_by_default: true
+  - platform: template
     name: "Exclusion Zone 2 Target Count"
     id: ld2450_mask2_target_count
     accuracy_decimals: 0
@@ -709,6 +740,19 @@ select:
               id(ld2450_target3_x).publish_state(NAN);
               id(ld2450_target3_y).publish_state(NAN);
             }
+
+event:
+  - platform: template
+    name: "Entry Exit Event"
+    id: entry_exit_event
+    icon: "mdi:door-open"
+    event_types:
+      - "entered_entry_1"
+      - "entered_entry_2"
+      - "exited_entry_1"
+      - "exited_entry_2"
+      - "hold_started"
+      - "hold_expired"
 
 text:
   - platform: template
@@ -897,6 +941,10 @@ uart:
           static float last_y[3] = {0, 0, 0};
           static bool in_entry[3][2] = {{false, false}, {false, false}, {false, false}};
           static unsigned long outside_entry_ms[3][2] = {{0, 0}, {0, 0}, {0, 0}};
+          // True while a target that first appeared inside an entry zone has not
+          // yet stepped out of it into the room (used for arrival events).
+          static bool appeared_in_entry[3][2] = {{false, false}, {false, false}, {false, false}};
+          int entry_counts[2] = {0, 0};
 
           auto parse_polygon_text = [](const std::string& text, ParsedPolygon& poly) {
             poly.count = 0;
@@ -936,12 +984,21 @@ uart:
 
           auto update_entry_state = [&](int i, float x, float y) {
             bool fresh_track = (last_seen_ms[i] == 0) || ((now - last_seen_ms[i]) > ENTRY_WINDOW_MS);
+            bool new_track = !prev_detected[i];
             for (int e = 0; e < 2; e++) {
               bool now_in = point_in_poly(x, y, poly_entries[e]);
+              if (now_in) entry_counts[e]++;
               if (fresh_track) {
                 outside_entry_ms[i][e] = now_in ? 0 : now;
               } else if (!now_in) {
                 outside_entry_ms[i][e] = now;
+              }
+              if (new_track) {
+                appeared_in_entry[i][e] = now_in;
+              } else if (appeared_in_entry[i][e] && !now_in) {
+                // Came in through the doorway and is now in the room
+                appeared_in_entry[i][e] = false;
+                id(entry_exit_event).trigger(e == 0 ? "entered_entry_1" : "entered_entry_2");
               }
               in_entry[i][e] = now_in;
             }
@@ -972,6 +1029,18 @@ uart:
           bool p2_detected = *((uint16_t *)(&bytes[18])) != 0;
           bool p3_detected = *((uint16_t *)(&bytes[26])) != 0;
           bool target_masked = false;
+
+          // While assumed presence holds a lost target, keep its last published
+          // position and Active flag instead of zeroing them, so the target stays
+          // in its zone for automations and the configurator. On the frame the
+          // last target vanishes the hold decision has not been made yet, so the
+          // clear is deferred one frame; a valid exit then clears normally.
+          bool any_raw = p1_detected || p2_detected || p3_detected;
+          auto freeze_target = [&](int i) -> bool {
+            if (!id(ld2450_assumed_presence).state) return false;
+            if (id(assumed_present_hold_active)) return true;
+            return !any_raw && prev_detected[i];
+          };
 
           if (p1_detected) {
             int16_t p1_x = *((int16_t *)(&bytes[4]));
@@ -1055,7 +1124,7 @@ uart:
             }
           }
 
-          if (update_entities && !p1_detected && !target_masked) {
+          if (update_entities && !p1_detected && !target_masked && !freeze_target(0)) {
             switch (id(extra_entities)) {
               case 5:
                 if (id(ld2450_target1_speed).state != 0) {
@@ -1165,7 +1234,7 @@ uart:
             }
           }
 
-          if (update_entities && !p2_detected && !target_masked) {
+          if (update_entities && !p2_detected && !target_masked && !freeze_target(1)) {
             switch (id(extra_entities)) {
               case 5:
                 if (id(ld2450_target2_speed).state != 0) {
@@ -1276,7 +1345,7 @@ uart:
             }
           }
 
-          if (update_entities && !p3_detected && !target_masked) {
+          if (update_entities && !p3_detected && !target_masked && !freeze_target(2)) {
             switch (id(extra_entities)) {
               case 5:
                 if (id(ld2450_target3_speed).state != 0) {
@@ -1357,7 +1426,7 @@ uart:
               for (int e = 0; e < 2; e++) {
                 if (!e_valid[e]) continue;
                 bool recent_outside = outside_entry_ms[i][e] != 0 && (now - outside_entry_ms[i][e]) <= ENTRY_WINDOW_MS;
-                exit_e[e] = in_entry[i][e] && recent_outside;
+                exit_e[e] = in_entry[i][e] && (recent_outside || appeared_in_entry[i][e]);
               }
               bool valid_exit = exit_e[0] || exit_e[1];
               const char *decision_zone = "None";
@@ -1371,10 +1440,13 @@ uart:
                 hold_active = false;
                 id(last_zone_hold) = 0;
                 id(entry_exit_last_decision).publish_state("Valid Exit");
+                if (exit_e[0]) id(entry_exit_event).trigger("exited_entry_1");
+                if (exit_e[1]) id(entry_exit_event).trigger("exited_entry_2");
               } else {
                 hold_active = true;
                 hold_until = now + hold_ms;
                 id(entry_exit_last_decision).publish_state("Hold Started");
+                id(entry_exit_event).trigger("hold_started");
               }
               id(entry_exit_last_zone).publish_state(decision_zone);
               break;
@@ -1393,6 +1465,7 @@ uart:
               hold_active = false;
               id(entry_exit_last_decision).publish_state("Hold Expired");
               id(entry_exit_last_zone).publish_state("None");
+              id(entry_exit_event).trigger("hold_expired");
             }
           }
 
@@ -1421,6 +1494,17 @@ uart:
           id(ld2450_zone2_occupancy).publish_state(zone_counts[1] > 0 || (hold_active && id(last_zone_hold) == 2));
           id(ld2450_zone3_occupancy).publish_state(zone_counts[2] > 0 || (hold_active && id(last_zone_hold) == 3));
           id(ld2450_zone4_occupancy).publish_state(zone_counts[3] > 0 || (hold_active && id(last_zone_hold) == 4));
+
+          id(ld2450_entry1_occupancy).publish_state(entry_counts[0] > 0);
+          id(ld2450_entry2_occupancy).publish_state(entry_counts[1] > 0);
+          if (update_entities && id(extra_entities) >= 2) {
+            if (id(ld2450_entry1_target_count).state != entry_counts[0]) {
+              id(ld2450_entry1_target_count).publish_state(entry_counts[0]);
+            }
+            if (id(ld2450_entry2_target_count).state != entry_counts[1]) {
+              id(ld2450_entry2_target_count).publish_state(entry_counts[1]);
+            }
+          }
 
           prev_detected[0] = p1_detected;
           prev_detected[1] = p2_detected;
