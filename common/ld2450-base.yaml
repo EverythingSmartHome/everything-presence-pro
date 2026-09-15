@@ -1372,27 +1372,6 @@ uart:
             }
           }
 
-          if (update_entities && id(extra_entities) >= 2) {
-            if (id(ld2450_zone1_target_count).state != zone_counts[0]) {
-              id(ld2450_zone1_target_count).publish_state(zone_counts[0]);
-            }
-            if (id(ld2450_zone2_target_count).state != zone_counts[1]) {
-              id(ld2450_zone2_target_count).publish_state(zone_counts[1]);
-            }
-            if (id(ld2450_zone3_target_count).state != zone_counts[2]) {
-              id(ld2450_zone3_target_count).publish_state(zone_counts[2]);
-            }
-            if (id(ld2450_zone4_target_count).state != zone_counts[3]) {
-              id(ld2450_zone4_target_count).publish_state(zone_counts[3]);
-            }
-            if (id(ld2450_mask1_target_count).state != zone_exclusion_counts[0]) {
-              id(ld2450_mask1_target_count).publish_state(zone_exclusion_counts[0]);
-            }
-            if (id(ld2450_mask2_target_count).state != zone_exclusion_counts[1]) {
-              id(ld2450_mask2_target_count).publish_state(zone_exclusion_counts[1]);
-            }
-          }
-
           bool any_detected = p1_detected || p2_detected || p3_detected;
           bool detected_now[3] = {p1_detected, p2_detected, p3_detected};
           bool ap_enabled = id(ld2450_assumed_presence).state;
@@ -1475,6 +1454,30 @@ uart:
 
           id(assumed_present_hold_active) = hold_active;
           id(assumed_present_until_ms) = hold_until;
+
+          // Zone counts are left untouched while assumed presence holds a lost
+          // target, so automations keep seeing it in its zone.
+          if (update_entities && id(extra_entities) >= 2 && !hold_active) {
+            if (id(ld2450_zone1_target_count).state != zone_counts[0]) {
+              id(ld2450_zone1_target_count).publish_state(zone_counts[0]);
+            }
+            if (id(ld2450_zone2_target_count).state != zone_counts[1]) {
+              id(ld2450_zone2_target_count).publish_state(zone_counts[1]);
+            }
+            if (id(ld2450_zone3_target_count).state != zone_counts[2]) {
+              id(ld2450_zone3_target_count).publish_state(zone_counts[2]);
+            }
+            if (id(ld2450_zone4_target_count).state != zone_counts[3]) {
+              id(ld2450_zone4_target_count).publish_state(zone_counts[3]);
+            }
+            if (id(ld2450_mask1_target_count).state != zone_exclusion_counts[0]) {
+              id(ld2450_mask1_target_count).publish_state(zone_exclusion_counts[0]);
+            }
+            if (id(ld2450_mask2_target_count).state != zone_exclusion_counts[1]) {
+              id(ld2450_mask2_target_count).publish_state(zone_exclusion_counts[1]);
+            }
+          }
+
           id(assumed_present).publish_state(hold_active);
           {
             static int last_remaining = -1;
