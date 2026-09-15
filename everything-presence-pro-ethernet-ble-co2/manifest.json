@@ -2,9 +2,7 @@
   "chipFamily": "ESP32",
   "ota": {
     "path": "everything-presence-pro-esp32.ota.bin",
-    "md5": "65d641fb4a4219b205e55e52022e1977",
-    "summary": "Breaking change: Polygon zones only + automatic migration",
-    "release_url": "https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v1.2.1"
+    "md5": "eed88e07cfad4baa97586a45be4f1335"
   },
   "parts": [
     {

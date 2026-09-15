@@ -1,6 +1,6 @@
 {
   "name": "Everything Presence Pro Ethernet BLE CO₂",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "home_assistant_domain": "esphome",
   "new_install_skip_erase": false,
   "builds": [
@@ -8,9 +8,7 @@
       "chipFamily": "ESP32",
       "ota": {
         "path": "everything-presence-pro-ethernet-ble-co2/everything-presence-pro-esp32.ota.bin",
-        "md5": "65d641fb4a4219b205e55e52022e1977",
-        "summary": "Breaking change: Polygon zones only + automatic migration",
-        "release_url": "https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v1.2.1"
+        "md5": "eed88e07cfad4baa97586a45be4f1335"
       },
       "parts": [
         {
