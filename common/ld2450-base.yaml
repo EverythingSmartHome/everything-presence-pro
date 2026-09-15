@@ -74,6 +74,10 @@ globals:
     type: unsigned long
     restore_value: False
     initial_value: '0'
+  - id: assumed_present_counting
+    type: bool
+    restore_value: False
+    initial_value: 'false'
 
 
 interval:
@@ -752,6 +756,7 @@ event:
       - "exited_entry_1"
       - "exited_entry_2"
       - "hold_started"
+      - "hold_countdown_started"
       - "hold_expired"
 
 text:
@@ -1436,17 +1441,33 @@ uart:
             hold_active = false;
           }
 
+          bool counting = hold_active && id(assumed_present_counting);
           if (hold_active) {
             if (static_present) {
-              // Static presence radar still sees someone: keep the hold alive
+              // Static presence radar still sees someone: the timer is parked
               hold_until = now + hold_ms;
-            } else if ((long)(now - hold_until) >= 0) {
-              hold_active = false;
-              id(entry_exit_last_decision).publish_state("Hold Expired");
-              id(entry_exit_last_zone).publish_state("None");
-              id(entry_exit_event).trigger("hold_expired");
+              if (counting) {
+                counting = false;
+                id(entry_exit_last_decision).publish_state("Hold Started");
+              }
+            } else {
+              if (!counting) {
+                // Static radar has let go: the Assume Present Timeout now runs
+                counting = true;
+                id(entry_exit_last_decision).publish_state("Hold Countdown");
+                id(entry_exit_event).trigger("hold_countdown_started");
+              }
+              if ((long)(now - hold_until) >= 0) {
+                hold_active = false;
+                counting = false;
+                id(entry_exit_last_decision).publish_state("Hold Expired");
+                id(entry_exit_last_zone).publish_state("None");
+                id(entry_exit_event).trigger("hold_expired");
+              }
             }
           }
+          if (!hold_active) counting = false;
+          id(assumed_present_counting) = counting;
 
           if (!hold_active && !any_detected) {
             id(last_zone_hold) = 0;
@@ -1482,7 +1503,7 @@ uart:
           {
             static int last_remaining = -1;
             int remaining = 0;
-            if (hold_active) {
+            if (counting) {
               long r = (long)(hold_until - now);
               remaining = r > 0 ? (int)((r + 999) / 1000) : 0;
             }
