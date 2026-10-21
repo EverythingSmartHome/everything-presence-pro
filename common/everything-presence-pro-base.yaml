@@ -24,6 +24,14 @@ esphome:
 # Enable logging
 logger:
 
+# Since ESPHome 2026.10 (esphome/esphome#19211), set_source_url() keeps the
+# pointer it is given and the update reads it later. Store the URL here so it
+# outlives the lambda that sets it.
+globals:
+  - id: update_manifest_url
+    type: std::string
+    restore_value: false
+
 # Enable Home Assistant API
 api:
   id: api_id
@@ -34,7 +42,8 @@ api:
       then:
         - lambda: |-
             ESP_LOGI("fw", "Setting update manifest URL: %s", url.c_str());
-            id(update_http_request).set_source_url(url);
+            id(update_manifest_url) = url;
+            id(update_http_request).set_source_url(id(update_manifest_url).c_str());
         - component.update: update_http_request
         - delay: 1s
         - update.perform:
@@ -845,7 +854,8 @@ button:
           base_url += "-manifest.json";
 
           ESP_LOGI("firmware", "Switching to manifest: %s", base_url.c_str());
-          id(update_http_request).set_source_url(base_url.c_str());
+          id(update_manifest_url) = base_url;
+          id(update_http_request).set_source_url(id(update_manifest_url).c_str());
       - component.update: update_http_request
       - delay: 2s
       - update.perform:
@@ -873,7 +883,8 @@ button:
           base_url += "-manifest.json";
 
           ESP_LOGI("firmware", "Switching to manifest: %s", base_url.c_str());
-          id(update_http_request).set_source_url(base_url.c_str());
+          id(update_manifest_url) = base_url;
+          id(update_http_request).set_source_url(id(update_manifest_url).c_str());
       - component.update: update_http_request
       - delay: 2s
       - update.perform:
