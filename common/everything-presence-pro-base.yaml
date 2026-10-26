@@ -34,7 +34,9 @@ api:
       then:
         - lambda: |-
             ESP_LOGI("fw", "Setting update manifest URL: %s", url.c_str());
-            id(update_http_request).set_source_url(url);
+            static std::string manifest_url;
+            manifest_url = url;
+            id(update_http_request).set_source_url(manifest_url.c_str());
         - component.update: update_http_request
         - delay: 1s
         - update.perform:
@@ -826,7 +828,8 @@ button:
       - logger.log: "Applying firmware update based on selected configuration"
       - lambda: |-
           // Build manifest URL based on selected options
-          std::string base_url = "https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-";
+          static std::string base_url;
+          base_url = "https://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-";
 
           // Add network type (required, lowercase)
           std::string network = id(firmware_network).current_option();
@@ -854,7 +857,8 @@ button:
       - logger.log: "Applying firmware update based on selected configuration - using http fallback"
       - lambda: |-
           // Build manifest URL based on selected options
-          std::string base_url = "http://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-";
+          static std::string base_url;
+          base_url = "http://docs.everythingsmart.io/update/everything-presence-pro/everything-presence-pro-";
 
           // Add network type (required, lowercase)
           std::string network = id(firmware_network).current_option();
