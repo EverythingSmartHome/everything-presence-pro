@@ -175,6 +175,11 @@ binary_sensor:
               lambda: 'return id(system_alarm_mode).current_option() != "Disabled";'
             then:
               - script.execute: update_relay_state
+        - if:
+            condition:
+              lambda: 'return id(led_mode_select).current_option() == "Motion Only";'
+            then:
+              - script.execute: control_leds
 
   - platform: template
     name: Occupancy
@@ -358,6 +363,7 @@ select:
       - "Environmental"
       - "Presence"
       - "Environmental + Presence"
+      - "Motion Only"
     initial_option: "Manual Control"
     restore_value: true
     icon: mdi:led-variant
@@ -471,6 +477,11 @@ script:
             ESP_LOGD("control_leds", "Executing control_leds_environmental_presence");
             id(control_leds_environmental_presence).execute();
           }
+          // Motion only mode
+          else if (id(led_mode_select).current_option() == "Motion Only") {
+            ESP_LOGD("control_leds", "Executing control_leds_motion_only");
+            id(control_leds_motion_only).execute();
+          }
 
   # Connection state - blue pulsing
   - id: control_leds_connecting
@@ -545,6 +556,34 @@ script:
                 transition_length: 500ms
             - delay: 500ms
             - light.turn_off: led_rgb
+
+  # Motion only mode
+  - id: control_leds_motion_only
+    then:
+      - if:
+          condition:
+            lambda: 'return id(pir_motion).state;'
+          then:
+            # Motion detected - solid orange
+            - lambda: |-
+                auto call = id(led_rgb).turn_on();
+                call.set_effect("none");
+                call.set_publish(false);
+                call.set_save(false);
+                call.perform();
+            - light.turn_on:
+                id: led_rgb
+                brightness: !lambda 'return 0.45 * id(led_brightness_multiplier).state;'
+                red: 100%
+                green: 45%
+                blue: 0%
+                white: 0%
+                transition_length: 0s
+          else:
+            # No motion - turn off
+            - light.turn_off:
+                id: led_rgb
+                transition_length: 0s
 
   # Placeholder for Environmental + Presence combined mode
   # Real implementation is in co2-base.yaml for CO2-enabled builds
