@@ -25,6 +25,7 @@ jobs:
       manifest_filename: everything-presence-pro-ethernet-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-ethernet
 
   publish-epp-ethernet-ble:
@@ -37,6 +38,7 @@ jobs:
       manifest_filename: everything-presence-pro-ethernet-ble-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-ethernet-ble
 
   publish-epp-ethernet-co2:
@@ -49,6 +51,7 @@ jobs:
       manifest_filename: everything-presence-pro-ethernet-co2-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-ethernet-co2
 
   publish-epp-ethernet-ble-co2:
@@ -61,6 +64,7 @@ jobs:
       manifest_filename: everything-presence-pro-ethernet-ble-co2-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-ethernet-ble-co2
 
   # WiFi variants
@@ -74,6 +78,7 @@ jobs:
       manifest_filename: everything-presence-pro-wifi-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-wifi
 
   publish-epp-wifi-ble:
@@ -86,6 +91,7 @@ jobs:
       manifest_filename: everything-presence-pro-wifi-ble-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-wifi-ble
 
   publish-epp-wifi-co2:
@@ -98,6 +104,7 @@ jobs:
       manifest_filename: everything-presence-pro-wifi-co2-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-wifi-co2
 
   publish-epp-wifi-ble-co2:
@@ -110,11 +117,14 @@ jobs:
       manifest_filename: everything-presence-pro-wifi-ble-co2-manifest.json
       clean: false
       esphome_version: latest
+      publish: false
       directory_name: everything-presence-pro-wifi-ble-co2
 
-  # Generate firmware index after all builds complete
+  # Collect every variant, then publish to gh-pages in a single push.
+  # Variants pushing separately raced each other on gh-pages (same fix as
+  # everything-presence-lite #471).
   generate-firmware-index:
-    name: Generate Firmware Index
+    name: Generate Firmware Index and Publish
     runs-on: ubuntu-latest
     needs:
       - publish-epp-ethernet
@@ -125,7 +135,11 @@ jobs:
       - publish-epp-wifi-ble
       - publish-epp-wifi-co2
       - publish-epp-wifi-ble-co2
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    # Queue (never cancel) so back-to-back pushes to main don't race on gh-pages.
+    concurrency:
+      group: gh-pages-publish
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -142,117 +156,77 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Detected version: $VERSION"
 
+      - name: Download packaged firmware
+        uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-*
+          merge-multiple: true
+          path: output
+
+      - name: Copy website
+        run: |
+          # Site files at the root, as the per-variant publish did before
+          cp -R static/* output/
+
       - name: Generate firmware index
         run: |
-          node scripts/generate-firmware-index.js --version "${{ steps.version.outputs.version }}"
-
-      - name: Deploy firmware index to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: .
-          target-folder: /
-          clean: false
-          single-commit: false
-          commit-message: "Update firmware-index.json for v${{ steps.version.outputs.version }}"
-
-  add-release-notes:
-    name: Add Release Notes to Manifests
-    runs-on: ubuntu-latest
-    needs:
-      - generate-firmware-index
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout gh-pages
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Get version from firmware index
-        id: version
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const data = JSON.parse(fs.readFileSync('firmware-index.json', 'utf8'));
-          const version = data?.product?.latestVersion || data?.firmwares?.[0]?.version || '';
-          if (!version) {
-            throw new Error('Could not determine version from firmware-index.json');
-          }
-          console.log(`Detected version: ${version}`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
-          NODE
+          node scripts/generate-firmware-index.js --version "${{ steps.version.outputs.version }}" --output-dir output
 
       - name: Patch manifests with release notes
         env:
           RELEASE_SUMMARY: "Breaking change: Polygon zones only + automatic migration"
           RELEASE_URL: "https://github.com/EverythingSmartHome/everything-presence-pro/releases/tag/v${{ steps.version.outputs.version }}"
+        working-directory: output
         run: |
           node - <<'NODE'
           const fs = require('fs');
           const path = require('path');
-
-          const root = process.cwd();
           const summary = process.env.RELEASE_SUMMARY;
           const releaseUrl = process.env.RELEASE_URL;
-
-          const isJson = (p) => p.endsWith('.json');
-          const walk = (dir) => {
-            const out = [];
-            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-              const full = path.join(dir, entry.name);
-              if (entry.isDirectory()) out.push(...walk(full));
-              else if (entry.isFile() && isJson(full)) out.push(full);
-            }
-            return out;
-          };
-
-          const files = walk(root);
+          const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+            const full = path.join(dir, e.name);
+            return e.isDirectory() ? walk(full) : (e.isFile() && full.endsWith('.json') ? [full] : []);
+          });
           let updated = 0;
-
-          for (const file of files) {
+          for (const file of walk('.')) {
             let data;
-            try {
-              data = JSON.parse(fs.readFileSync(file, 'utf8'));
-            } catch {
-              continue;
-            }
-
+            try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
             let touched = false;
-            if (Array.isArray(data.builds)) {
-              data.builds = data.builds.map((build) => {
-                if (build && build.ota && typeof build.ota === 'object') {
-                  build.ota.summary = summary;
-                  build.ota.release_url = releaseUrl;
-                  touched = true;
-                }
-                return build;
-              });
+            for (const build of Array.isArray(data.builds) ? data.builds : []) {
+              if (build && build.ota && typeof build.ota === 'object') {
+                build.ota.summary = summary;
+                build.ota.release_url = releaseUrl;
+                touched = true;
+              }
             }
-
             if (data.ota && typeof data.ota === 'object') {
               data.ota.summary = summary;
               data.ota.release_url = releaseUrl;
               touched = true;
             }
-
             if (touched) {
               fs.writeFileSync(file, JSON.stringify(data, null, 2));
               updated += 1;
             }
           }
-
           console.log(`Updated ${updated} manifest files`);
           NODE
 
-      - name: Deploy updated manifests to GitHub Pages
+      - name: Deploy firmware and website to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: .
-          target-folder: /
+          branch: gh-pages
+          folder: output
           clean: false
-          single-commit: false
-          commit-message: "Add release notes for v${{ steps.version.outputs.version }}"
+          force: false
+          attempt-limit: 10
+          commit-message: "Publish firmware and firmware-index.json for v${{ steps.version.outputs.version }}"
+
+  # Mirror the published firmware to docs.everythingsmart.io/update (HTTP)
+  deploy-firmware-host:
+    needs: generate-firmware-index
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    uses: EverythingSmartHome/everything-presence-lite/.github/workflows/deploy-firmware-host.yml@main
+    secrets: inherit
+    with:
+      product: everything-presence-pro
