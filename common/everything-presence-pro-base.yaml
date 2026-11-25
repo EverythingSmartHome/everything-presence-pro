@@ -159,6 +159,32 @@ i2c:
     sda: GPIO33
     scan: true
 
+# Relay-only state is intentionally not restored across boots.
+globals:
+  - id: relay_pir_count
+    type: uint8_t
+    initial_value: '0'
+  - id: relay_pir_started
+    type: uint32_t
+    initial_value: '0'
+  - id: relay_pir_high
+    type: bool
+    initial_value: 'false'
+  - id: relay_pir_qualified
+    type: bool
+    initial_value: 'false'
+
+interval:
+  - interval: 100ms
+    then:
+      - lambda: |-
+          // Half-open window; unsigned subtraction handles millis rollover.
+          if (id(relay_pir_count) && !id(relay_pir_qualified) &&
+              uint32_t(millis() - id(relay_pir_started)) >=
+                  uint32_t(id(relay_motion_window).state * 1000)) {
+            id(relay_pir_count) = 0;
+          }
+
 binary_sensor:
   - platform: gpio
     name: Motion
@@ -167,9 +193,34 @@ binary_sensor:
     pin:
       number: GPIO36
     filters:
+      # Observe raw edges before delayed_off merges public Motion transitions.
+      - lambda: |-
+          const bool rising = x && !id(relay_pir_high);
+          id(relay_pir_high) = x;
+          if (rising && !id(relay_pir_qualified)) {
+            const uint32_t now = millis();
+            if (!id(relay_pir_count) ||
+                uint32_t(now - id(relay_pir_started)) >=
+                    uint32_t(id(relay_motion_window).state * 1000)) {
+              id(relay_pir_count) = 0;
+              id(relay_pir_started) = now;
+            }
+            if (++id(relay_pir_count) >= id(relay_motion_count).state) {
+              id(relay_pir_qualified) = true;
+              id(relay_pir_count) = 0;
+              // Public Motion may already be high from an earlier pulse.
+              if (id(system_alarm_mode).current_option() != "Disabled")
+                id(update_relay_state).execute();
+            }
+          }
+          return x;
       - delayed_off: !lambda 'return id(pir_off_delay).state * 1000.0;'
     on_state:
       then:
+        - lambda: |-
+            // Qualification lasts until public Motion clears (Motion Timeout).
+            // Incomplete counts can span Motion OFF events within the window.
+            if (!x) id(relay_pir_qualified) = false;
         - if:
             condition:
               lambda: 'return id(system_alarm_mode).current_option() != "Disabled";'
@@ -346,6 +397,7 @@ select:
     restore_value: true
     on_value:
       then:
+        - script.execute: reset_relay_motion
         - script.execute: update_relay_state
 
   - platform: template
@@ -414,21 +466,38 @@ select:
     initial_option: "Disabled"
 
 script:
+  - id: reset_relay_motion
+    then:
+      - lambda: |-
+          id(relay_pir_count) = 0;
+          id(relay_pir_qualified) = false;
+          // Retain raw level: changing settings during HIGH is not a pulse.
+      - if:
+          condition:
+            lambda: 'return id(system_alarm_mode).current_option() != "Disabled";'
+          then:
+            - script.execute: update_relay_state
+
   - id: update_relay_state
     mode: restart
     then:
       - lambda: |-
           auto mode = id(system_alarm_mode).current_option();
           bool activate = false;
+          // Count one retains the original startup and Occupancy behaviour.
+          const bool unfiltered = id(relay_motion_count).state <= 1;
+          const bool motion = unfiltered ? id(pir_motion).state : id(relay_pir_qualified);
+          const bool either = unfiltered ? id(occupancy).state :
+              (id(mmwave_occupancy).state || motion);
 
           if (mode == "Motion Only") {
-            activate = id(pir_motion).state;
+            activate = motion;
           } else if (mode == "Presence Only") {
             activate = id(occupancy).state;
           } else if (mode == "Motion or Presence") {
-            activate = id(pir_motion).state || id(occupancy).state;
+            activate = motion || either;
           } else if (mode == "Motion and Presence") {
-            activate = id(pir_motion).state && id(mmwave_occupancy).state;
+            activate = motion && id(mmwave_occupancy).state;
           }
 
           bool desired = (id(relay_contact_mode).current_option() == "Normally Open (NO)") ? activate : !activate;
@@ -714,6 +783,35 @@ switch:
       ignore_strapping_warning: true
 
 number:
+  - platform: template
+    name: Relay Motion Count
+    id: relay_motion_count
+    entity_category: config
+    min_value: 1
+    max_value: 10
+    step: 1
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    mode: slider
+    on_value:
+      - script.execute: reset_relay_motion
+
+  - platform: template
+    name: Relay Motion Window
+    id: relay_motion_window
+    entity_category: config
+    min_value: 1
+    max_value: 60
+    step: 1
+    initial_value: 10
+    unit_of_measurement: seconds
+    optimistic: true
+    restore_value: true
+    mode: slider
+    on_value:
+      - script.execute: reset_relay_motion
+
   - platform: template
     name: "LED Brightness"
     id: led_brightness_multiplier
