@@ -767,7 +767,7 @@ number:
     name: "Temperature Calibration"
     id: env_temperature_offset
     unit_of_measurement: "°C"
-    min_value: -25
+    min_value: -30
     max_value: 5
     step: 0.1
     mode: box
