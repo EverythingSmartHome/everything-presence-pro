@@ -34,6 +34,11 @@ packages:
    bluetooth_base: !include common/bluetooth-base.yaml
    co2_base: !include common/co2-base.yaml
 
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 1100ms
+
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
