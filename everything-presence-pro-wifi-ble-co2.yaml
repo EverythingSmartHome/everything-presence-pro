@@ -65,3 +65,11 @@ esp32_improv:
 
 improv_serial:
 
+# A scan window above 600 ms starves Wi-Fi on the shared ESP32 radio (ESPHome
+# warns about it). Wi-Fi builds only: the Ethernet BLE builds keep the long
+# window from common/bluetooth-base.yaml. active: true still comes from there.
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 300ms
+    connection_scan_window: 30ms
